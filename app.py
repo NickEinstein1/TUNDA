@@ -39,8 +39,22 @@ async def health_check():
     return {"status": "healthy", "service": "Tunda Voice Companion"}
 
 # Setup templates and static files
-templates = Jinja2Templates(directory="web/templates")
-app.mount("/static", StaticFiles(directory="web/static"), name="static")
+import os
+
+# Create directories if they don't exist
+templates_dir = "web/templates"
+static_dir = "web/static"
+
+if not os.path.exists(templates_dir):
+    os.makedirs(templates_dir, exist_ok=True)
+    logger.info(f"Created templates directory: {templates_dir}")
+
+if not os.path.exists(static_dir):
+    os.makedirs(static_dir, exist_ok=True)
+    logger.info(f"Created static directory: {static_dir}")
+
+templates = Jinja2Templates(directory=templates_dir)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Initialize components
 try:

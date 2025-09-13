@@ -13,6 +13,8 @@ mkdir -p models/whisper
 mkdir -p models/emotion_model
 mkdir -p data
 mkdir -p logs
+mkdir -p web/static
+mkdir -p web/templates
 
 # Setup models (lightweight for web deployment)
 echo "🤖 Setting up models..."
