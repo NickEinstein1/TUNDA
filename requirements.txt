@@ -1,0 +1,52 @@
+# Core dependencies
+numpy>=1.21.0,<2.0.0
+scipy>=1.7.0,<2.0.0
+pandas>=1.3.0,<3.0.0
+
+# Audio processing
+librosa>=0.9.2,<1.0.0
+soundfile>=0.10.3,<1.0.0
+pyaudio>=0.2.11
+pydub>=0.25.1,<1.0.0
+
+# Speech recognition
+openai-whisper>=20231117
+# faster-whisper>=0.9.0  # Optional, may have compatibility issues
+
+# Machine learning
+scikit-learn>=1.0.0,<2.0.0
+torch>=2.0.0
+# torchaudio>=2.0.0  # Optional, not strictly needed
+transformers>=4.21.0,<5.0.0
+
+# Text-to-speech (all optional - system TTS will be used as fallback)
+# piper-tts  # Install manually if needed
+# TTS  # Has Python version compatibility issues
+
+# LLM integration (optional)
+requests>=2.28.0,<3.0.0
+
+# Web framework
+fastapi>=0.100.0,<1.0.0
+uvicorn>=0.23.0,<1.0.0
+websockets>=11.0.0,<12.0.0
+jinja2>=3.1.0,<4.0.0
+
+# Configuration and utilities
+pyyaml>=6.0,<7.0.0
+python-dotenv>=1.0.0,<2.0.0
+click>=8.1.0,<9.0.0
+rich>=13.0.0,<14.0.0
+tqdm>=4.64.0,<5.0.0
+joblib>=1.3.0,<2.0.0
+
+# Development and testing (optional)
+pytest>=7.0.0,<8.0.0
+pytest-asyncio>=0.21.0,<1.0.0
+
+# Optional: For web interface
+# streamlit>=1.28.0  # Install separately if needed
+# plotly>=5.15.0     # Install separately if needed
+
+# Optional: Windows-specific (install manually if needed on Windows)
+# pywin32>=306  # For Windows SAPI TTS

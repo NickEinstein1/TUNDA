@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tunda Voice Avatar Preview</title>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .preview-container {
+            text-align: center;
+            color: white;
+        }
+        
+        .tunda-avatar {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            margin: 0 auto 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 20px 50px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .tunda-avatar:hover {
+            transform: scale(1.05);
+            box-shadow: 0 25px 60px rgba(102, 126, 234, 0.5);
+        }
+        
+        .voice-node {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .voice-core {
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            position: relative;
+            z-index: 3;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .voice-waves {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .voice-wave-bar {
+            width: 4px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 2px;
+            animation: voiceWave 1.5s ease-in-out infinite;
+        }
+        
+        .voice-wave-bar:nth-child(1) {
+            height: 12px;
+            animation-delay: 0s;
+        }
+        
+        .voice-wave-bar:nth-child(2) {
+            height: 24px;
+            animation-delay: 0.1s;
+        }
+        
+        .voice-wave-bar:nth-child(3) {
+            height: 36px;
+            animation-delay: 0.2s;
+        }
+        
+        .voice-wave-bar:nth-child(4) {
+            height: 30px;
+            animation-delay: 0.3s;
+        }
+        
+        .voice-wave-bar:nth-child(5) {
+            height: 18px;
+            animation-delay: 0.4s;
+        }
+        
+        .voice-ring {
+            position: absolute;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            animation: voiceRing 4s linear infinite;
+        }
+        
+        .voice-ring:nth-child(1) {
+            width: 100px;
+            height: 100px;
+            animation-delay: 0s;
+        }
+        
+        .voice-ring:nth-child(2) {
+            width: 130px;
+            height: 130px;
+            animation-delay: 1s;
+        }
+        
+        .voice-ring:nth-child(3) {
+            width: 160px;
+            height: 160px;
+            animation-delay: 2s;
+        }
+        
+        .voice-particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        .voice-particle {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            animation: voiceParticle 5s linear infinite;
+        }
+        
+        .voice-particle:nth-child(1) {
+            top: 20%;
+            left: 50%;
+            animation-delay: 0s;
+        }
+        
+        .voice-particle:nth-child(2) {
+            top: 50%;
+            left: 80%;
+            animation-delay: 1.25s;
+        }
+        
+        .voice-particle:nth-child(3) {
+            top: 80%;
+            left: 50%;
+            animation-delay: 2.5s;
+        }
+        
+        .voice-particle:nth-child(4) {
+            top: 50%;
+            left: 20%;
+            animation-delay: 3.75s;
+        }
+        
+        @keyframes voiceWave {
+            0%, 100% {
+                transform: scaleY(0.5);
+                opacity: 0.7;
+            }
+            50% {
+                transform: scaleY(1.2);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes voiceRing {
+            0% {
+                transform: scale(0.8);
+                opacity: 0.8;
+            }
+            100% {
+                transform: scale(1.3);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes voiceParticle {
+            0% {
+                transform: scale(0) rotate(0deg);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1) rotate(180deg);
+                opacity: 0.8;
+            }
+            100% {
+                transform: scale(0) rotate(360deg);
+                opacity: 0;
+            }
+        }
+        
+        .tunda-avatar.active {
+            animation: voicePulse 2s infinite;
+        }
+        
+        .tunda-avatar.active .voice-wave-bar {
+            animation: voiceWaveActive 0.8s ease-in-out infinite;
+        }
+        
+        @keyframes voicePulse {
+            0% { 
+                box-shadow: 0 20px 50px rgba(102, 126, 234, 0.4);
+                transform: scale(1);
+            }
+            50% { 
+                box-shadow: 0 20px 50px rgba(102, 126, 234, 0.7), 0 0 0 20px rgba(102, 126, 234, 0.1), 0 0 0 40px rgba(102, 126, 234, 0.05);
+                transform: scale(1.02);
+            }
+            100% { 
+                box-shadow: 0 20px 50px rgba(102, 126, 234, 0.4);
+                transform: scale(1);
+            }
+        }
+        
+        @keyframes voiceWaveActive {
+            0%, 100% {
+                transform: scaleY(0.3);
+                opacity: 0.8;
+            }
+            50% {
+                transform: scaleY(1.8);
+                opacity: 1;
+            }
+        }
+        
+        .controls {
+            margin-top: 30px;
+        }
+        
+        .btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 12px 24px;
+            margin: 0 10px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+        
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #ffffff, #e0e0e0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        p {
+            font-size: 1.2em;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="preview-container">
+        <h1>Tunda</h1>
+        <p>Your Empathic Voice Companion</p>
+        
+        <div class="tunda-avatar" id="avatar">
+            <div class="voice-node">
+                <div class="voice-ring"></div>
+                <div class="voice-ring"></div>
+                <div class="voice-ring"></div>
+                <div class="voice-core">
+                    <div class="voice-waves">
+                        <div class="voice-wave-bar"></div>
+                        <div class="voice-wave-bar"></div>
+                        <div class="voice-wave-bar"></div>
+                        <div class="voice-wave-bar"></div>
+                        <div class="voice-wave-bar"></div>
+                    </div>
+                </div>
+                <div class="voice-particles">
+                    <div class="voice-particle"></div>
+                    <div class="voice-particle"></div>
+                    <div class="voice-particle"></div>
+                    <div class="voice-particle"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="btn" onclick="toggleActive()">Toggle Active State</button>
+            <button class="btn" onclick="window.open('http://localhost:8000', '_blank')">Open Full App</button>
+        </div>
+        
+        <p style="margin-top: 30px; font-size: 1em;">
+            ✨ Beautiful voice wave visualization<br>
+            🎵 Animated sound bars that respond to different states<br>
+            💫 Particle effects and expanding rings<br>
+            🎨 Modern glass-morphism design
+        </p>
+    </div>
+    
+    <script>
+        const avatar = document.getElementById('avatar');
+        let isActive = false;
+        
+        function toggleActive() {
+            isActive = !isActive;
+            if (isActive) {
+                avatar.classList.add('active');
+            } else {
+                avatar.classList.remove('active');
+            }
+        }
+        
+        // Click avatar to toggle
+        avatar.addEventListener('click', toggleActive);
+    </script>
+</body>
+</html>

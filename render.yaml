@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: tunda-voice-companion
+    env: python
+    buildCommand: pip install -r requirements.txt && python setup_models.py
+    startCommand: python app.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.18
+      - key: PORT
+        value: 8000
+    disk:
+      name: tunda-disk
+      mountPath: /opt/render/project/src/models
+      sizeGB: 1

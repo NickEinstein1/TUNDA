@@ -1,0 +1,128 @@
+# Empathic Voice Companion Configuration
+
+# Audio Settings
+audio:
+  sample_rate: 16000
+  chunk_size: 1024
+  channels: 1
+  input_device: null  # null for default, or device index
+  output_device: null
+  silence_threshold: 0.01
+  silence_duration: 2.0  # seconds of silence before processing
+
+# Speech Recognition
+speech_recognition:
+  model: "base"  # tiny, base, small, medium, large
+  language: "en"  # auto-detect if null
+  temperature: 0.0
+  beam_size: 5
+  best_of: 5
+  patience: 1.0
+
+# Emotion Detection
+emotion_detection:
+  enabled: true
+  confidence_threshold: 0.6
+  supported_emotions:
+    - happy
+    - sad
+    - angry
+    - anxious
+    - calm
+    - neutral
+  feature_extraction:
+    mfcc_coefficients: 13
+    chroma_features: 12
+    spectral_features: true
+    prosodic_features: true
+    window_size: 2048
+    hop_length: 512
+
+# Response Generation
+response_generation:
+  llm_provider: "ollama"  # ollama, huggingface, openai
+  model_name: "llama3.1:8b"
+  max_tokens: 150
+  temperature: 0.7
+  empathy_styles:
+    supportive: "Provide warm, encouraging responses that validate emotions"
+    reflective: "Mirror back emotions and help process feelings"
+    solution_focused: "Acknowledge emotions while gently guiding toward solutions"
+    therapeutic: "Use CBT-inspired techniques for emotional support"
+  default_style: "supportive"
+
+# Personality Settings
+personality:
+  name: "Tunda"
+  greeting_style: "warm_personal"
+  ask_about_day: true
+  offer_care_plans: true
+  remember_user_name: true
+  personality_traits:
+    - "caring"
+    - "attentive"
+    - "therapeutic"
+    - "supportive"
+
+# Text-to-Speech
+text_to_speech:
+  provider: "system"  # system, piper, coqui (system is most compatible)
+  voice_model: "default"
+  speaking_rate: 1.0
+  pitch_adjustment: 0.0
+  volume: 0.8
+  emotion_adaptive: false  # Disable for better compatibility
+  voice_mapping:
+    happy: "default"
+    sad: "default"
+    angry: "default"
+    anxious: "default"
+    calm: "default"
+    neutral: "default"
+
+# Memory and Context
+memory:
+  enabled: true
+  max_history_length: 50
+  emotion_history_window: 10
+  context_window: 5
+  save_conversations: true
+  conversation_file: "data/conversations.json"
+
+# Web Interface
+web:
+  host: "localhost"
+  port: 8000
+  debug: false
+  auto_reload: true
+
+# API Server
+api:
+  host: "localhost"
+  port: 8001
+  cors_enabled: true
+  rate_limiting: true
+  max_requests_per_minute: 60
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/empathic_voice.log"
+  max_file_size: "10MB"
+  backup_count: 5
+  console_output: true
+
+# Model Paths
+models:
+  whisper_cache: "models/whisper"
+  emotion_model: "models/emotion_classifier.pkl"
+  piper_voices: "models/piper_voices"
+  ollama_models: "models/ollama"
+
+# Development
+development:
+  mock_audio: false
+  mock_llm: false
+  save_audio_samples: false
+  audio_samples_dir: "data/audio_samples"
+  profiling_enabled: false
