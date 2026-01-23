@@ -22,6 +22,7 @@ speech_recognition:
 # Emotion Detection
 emotion_detection:
   enabled: true
+  model_type: "wav2vec2" # Options: "random_forest", "wav2vec2", "auto"
   confidence_threshold: 0.6
   supported_emotions:
     - happy
