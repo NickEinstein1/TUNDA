@@ -31,6 +31,7 @@ class SpeechRecognitionConfig:
 @dataclass
 class EmotionDetectionConfig:
     enabled: bool = True
+    model_type: str = "wav2vec2"
     confidence_threshold: float = 0.6
     supported_emotions: list = None
     mfcc_coefficients: int = 13
