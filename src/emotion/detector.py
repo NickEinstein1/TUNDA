@@ -14,18 +14,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 
 from ..utils.config import config
+from ..utils.config import config
 from .features import AudioFeatureExtractor, AudioFeatures
+from .dl_detector import DeepLearningEmotionDetector
+from .types import EmotionPrediction
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class EmotionPrediction:
-    """Result of emotion prediction."""
-    emotion: str
-    confidence: float
-    probabilities: Dict[str, float]
-    features_used: int
 
 
 class EmotionDetector:
@@ -37,14 +31,26 @@ class EmotionDetector:
         self.model = None
         self.scaler = None
         self.emotion_labels = self.config.supported_emotions
+        self.emotion_labels = self.config.supported_emotions
         self.model_path = config.get_model_path("emotion_model")
         
-        # Try to load existing model
-        self._load_model()
+        # Check model type from config
+        self.model_type = getattr(self.config, 'model_type', 'random_forest')
+        self.dl_detector = None
         
-        # If no model exists, create and train a basic one
-        if self.model is None:
-            self._create_default_model()
+        if self.model_type == 'wav2vec2':
+            self.dl_detector = DeepLearningEmotionDetector()
+            if self.dl_detector.pipeline is None:
+                logger.warning("Falling back to Random Forest model")
+                self.model_type = 'random_forest'
+        
+        if self.model_type == 'random_forest':
+            # Try to load existing model
+            self._load_model()
+            
+            # If no model exists, create and train a basic one
+            if self.model is None:
+                self._create_default_model()
     
     def _load_model(self):
         """Load trained emotion detection model."""
@@ -218,6 +224,9 @@ class EmotionDetector:
     def predict_emotion(self, audio: np.ndarray) -> EmotionPrediction:
         """Predict emotion from audio."""
         try:
+            if self.model_type == 'wav2vec2' and self.dl_detector:
+                return self.dl_detector.predict_emotion(audio)
+
             # Extract features
             features = self.feature_extractor.extract_features(audio)
             feature_vector = self.feature_extractor.features_to_vector(features)
