@@ -14,7 +14,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 
 from ..utils.config import config
-from ..utils.config import config
 from .features import AudioFeatureExtractor, AudioFeatures
 from .dl_detector import DeepLearningEmotionDetector
 from .types import EmotionPrediction
@@ -30,7 +29,6 @@ class EmotionDetector:
         self.feature_extractor = AudioFeatureExtractor()
         self.model = None
         self.scaler = None
-        self.emotion_labels = self.config.supported_emotions
         self.emotion_labels = self.config.supported_emotions
         self.model_path = config.get_model_path("emotion_model")
         

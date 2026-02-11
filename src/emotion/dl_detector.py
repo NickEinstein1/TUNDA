@@ -17,7 +17,8 @@ class DeepLearningEmotionDetector:
     
     def __init__(self):
         self.config = config.emotion_detection
-        self.model_name = "superb/wav2vec2-base-superb-er"
+        self.model_name = getattr(self.config, "dl_model_name", "superb/wav2vec2-base-superb-er")
+        self.device = self.config.device
         self.pipeline = None
         self.emotion_map = {
             "neu": "neutral",
@@ -32,10 +33,13 @@ class DeepLearningEmotionDetector:
         """Load the Wav2Vec2 model pipeline."""
         try:
             logger.info(f"Loading emotion model: {self.model_name}")
+            device = self.device
+            if device is None:
+                device = "cuda" if torch.cuda.is_available() else "cpu"
             self.pipeline = pipeline(
                 "audio-classification", 
                 model=self.model_name,
-                device=0 if torch.cuda.is_available() else -1
+                device=0 if device == "cuda" else -1
             )
             logger.info("Deep Learning emotion model loaded successfully")
         except Exception as e:

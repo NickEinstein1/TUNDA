@@ -1,5 +1,20 @@
 # Empathic Voice Companion Configuration
 
+# Performance profile
+performance:
+  profile: "balanced"  # fast, balanced, quality
+  latency_budget_ms: 1200
+  latency_budget_min_ms: 600
+  latency_budget_max_ms: 2000
+  latency_ewma_alpha: 0.2
+  adaptive_latency_enabled: true
+  gpu_mem_min_gb_for_large_stt: 10.0
+  gpu_mem_min_gb_for_large_llm: 12.0
+  llm_models:
+    fast: "llama3.1:8b"
+    balanced: "llama3.1:8b"
+    quality: "llama3.1:70b"
+
 # Audio Settings
 audio:
   sample_rate: 16000
@@ -9,21 +24,46 @@ audio:
   output_device: null
   silence_threshold: 0.01
   silence_duration: 2.0  # seconds of silence before processing
+  min_speech_seconds: 0.3
+  max_segment_seconds: 20.0
+  queue_maxsize: 10
+  noise_reduction: false
 
 # Speech Recognition
 speech_recognition:
-  model: "base"  # tiny, base, small, medium, large
-  language: "en"  # auto-detect if null
+  model: "auto"  # auto, tiny, base, small, medium, large, large-v3
+  language: "en"  # auto-detect if "auto"
   temperature: 0.0
   beam_size: 5
   best_of: 5
   patience: 1.0
+  device: null  # "cpu", "cuda", or null for auto
+  compute_type: "auto"  # auto, int8, int8_float16, float16, float32
+  cpu_threads: null
+  num_workers: 2
+  dynamic_model_switching: true
+  short_model: "small"
+  long_model: "large-v3"
+  short_utterance_seconds: 4.0
+  vad_filter: true
+  vad_threshold: 0.5
+  vad_min_silence_duration_ms: 300
+  vad_speech_pad_ms: 200
+  vad_adaptive: true
+  vad_adaptive_min: 0.3
+  vad_adaptive_max: 0.8
+  vad_adaptive_scale: 1.8
+  vad_noise_percentile: 0.1
+  initial_prompt: null
+  condition_on_previous_text: true
 
 # Emotion Detection
 emotion_detection:
   enabled: true
   model_type: "wav2vec2" # Options: "random_forest", "wav2vec2", "auto"
   confidence_threshold: 0.6
+  dl_model_name: "superb/wav2vec2-base-superb-er"
+  device: null  # "cpu", "cuda", or null for auto
   supported_emotions:
     - happy
     - sad
@@ -45,6 +85,9 @@ response_generation:
   model_name: "llama3.1:8b"
   max_tokens: 150
   temperature: 0.7
+  top_p: 0.9
+  repeat_penalty: 1.1
+  max_memories: 3
   empathy_styles:
     supportive: "Provide warm, encouraging responses that validate emotions"
     reflective: "Mirror back emotions and help process feelings"
@@ -87,6 +130,7 @@ memory:
   max_history_length: 50
   emotion_history_window: 10
   context_window: 5
+  retrieval_limit: 3
   save_conversations: true
   conversation_file: "data/conversations.json"
 

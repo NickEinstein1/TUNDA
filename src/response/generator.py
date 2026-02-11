@@ -3,12 +3,13 @@
 import requests
 import json
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Iterator
 from dataclasses import dataclass
 import random
 import time
 
 from ..utils.config import config
+from ..utils.performance import latency_manager
 from .empathy import EmpathyPatterns
 from .care_plans import CarePlanGenerator
 from ..emotion.detector import EmotionPrediction
@@ -25,6 +26,11 @@ class ResponseContext:
     conversation_history: List[Dict[str, str]]
     empathy_style: str
     user_preferences: Dict[str, Any]
+    relevant_memories: List[Dict[str, Any]] = None
+
+    def __post_init__(self):
+        if self.relevant_memories is None:
+            self.relevant_memories = []
 
 
 @dataclass
@@ -41,8 +47,13 @@ class EmpathicResponse:
 class LLMProvider:
     """Base class for LLM providers."""
     
+    
     def generate_response(self, prompt: str, **kwargs) -> str:
         raise NotImplementedError
+
+    def generate_response_stream(self, prompt: str, **kwargs) -> Iterator[str]:
+        """Generate streaming response."""
+        yield self.generate_response(prompt, **kwargs)
 
 
 class OllamaProvider(LLMProvider):
@@ -63,7 +74,8 @@ class OllamaProvider(LLMProvider):
                 "options": {
                     "temperature": kwargs.get("temperature", 0.7),
                     "max_tokens": kwargs.get("max_tokens", 150),
-                    "top_p": kwargs.get("top_p", 0.9)
+                    "top_p": kwargs.get("top_p", 0.9),
+                    "repeat_penalty": kwargs.get("repeat_penalty", 1.1)
                 }
             }
             
@@ -94,6 +106,47 @@ class OllamaProvider(LLMProvider):
             return response.status_code == 200
         except:
             return False
+
+    def generate_response_stream(self, prompt: str, **kwargs) -> Iterator[str]:
+        """Generate streaming response using Ollama."""
+        try:
+            payload = {
+                "model": self.model_name,
+                "prompt": prompt,
+                "stream": True,  # Enable streaming
+                "options": {
+                    "temperature": kwargs.get("temperature", 0.7),
+                    "max_tokens": kwargs.get("max_tokens", 150),
+                    "top_p": kwargs.get("top_p", 0.9),
+                    "repeat_penalty": kwargs.get("repeat_penalty", 1.1)
+                }
+            }
+            
+            with self.session.post(
+                f"{self.base_url}/api/generate",
+                json=payload,
+                stream=True,
+                timeout=30
+            ) as response:
+                if response.status_code != 200:
+                    logger.error(f"Ollama API error: {response.status_code}")
+                    return
+
+                for line in response.iter_lines():
+                    if line:
+                        try:
+                            json_response = json.loads(line)
+                            token = json_response.get("response", "")
+                            if token:
+                                yield token
+                            if json_response.get("done", False):
+                                break
+                        except json.JSONDecodeError:
+                            continue
+                            
+        except Exception as e:
+            logger.error(f"Ollama streaming error: {e}")
+            yield ""
 
 
 class HuggingFaceProvider(LLMProvider):
@@ -132,6 +185,7 @@ class HuggingFaceProvider(LLMProvider):
             return ""
         
         try:
+            import torch
             # Tokenize input
             inputs = self.tokenizer.encode(prompt, return_tensors="pt", truncation=True, max_length=512)
             
@@ -158,12 +212,26 @@ class HuggingFaceProvider(LLMProvider):
         """Check if model is available."""
         return self.model is not None
 
+    def generate_response_stream(self, prompt: str, **kwargs) -> Iterator[str]:
+        """Generate streaming response using Hugging Face (simulated streaming)."""
+        # Hugging Face pipelines don't fundamentally support token-by-token streaming effortlessly 
+        # without complex streamer setup. For now, we simulate it or just yield the whole thing.
+        # Ideally, we would use TextIteratorStreamer from transformers.
+        
+        full_response = self.generate_response(prompt, **kwargs)
+        # Simulate streaming by yielding words
+        words = full_response.split(' ')
+        for word in words:
+            yield word + " "
+            time.sleep(0.05) # Artificial delay for effect
+
 
 class EmpathicResponseGenerator:
     """Main empathic response generator."""
     
     def __init__(self):
         self.config = config.response_generation
+        self.performance = config.performance
         self.empathy_patterns = EmpathyPatterns()
         self.care_plan_generator = CarePlanGenerator()
         self.llm_provider = None
@@ -175,9 +243,13 @@ class EmpathicResponseGenerator:
     def _initialize_llm_provider(self):
         """Initialize the appropriate LLM provider."""
         provider_name = self.config.llm_provider.lower()
+        model_name = self._select_llm_model_name()
+        max_tokens = self._select_max_tokens()
+        self.config.model_name = model_name
+        self.config.max_tokens = max_tokens
         
         if provider_name == "ollama":
-            self.llm_provider = OllamaProvider(model_name=self.config.model_name)
+            self.llm_provider = OllamaProvider(model_name=model_name)
             if not self.llm_provider.is_available():
                 logger.warning("Ollama not available, falling back to template-based responses")
                 self.llm_provider = None
@@ -222,6 +294,38 @@ class EmpathicResponseGenerator:
         except Exception as e:
             logger.error(f"Response generation failed: {e}")
             return self._generate_fallback_response(context, time.time() - start_time)
+
+    def generate_response_stream(self, context: ResponseContext) -> Iterator[str]:
+        """Generate streaming response tokens."""
+        start = time.time()
+        try:
+            # Get empathy pattern
+            pattern = self.empathy_patterns.get_pattern(context.emotion, context.empathy_style)
+            
+            if self.llm_provider and self.llm_provider.is_available():
+                prompt = self._create_llm_prompt(context, pattern)
+                yielded = False
+                for token in self.llm_provider.generate_response_stream(
+                    prompt,
+                    temperature=self.config.temperature,
+                    max_tokens=self.config.max_tokens,
+                    top_p=self.config.top_p,
+                    repeat_penalty=self.config.repeat_penalty
+                ):
+                    if token:
+                        yielded = True
+                        yield token
+                if not yielded:
+                    yield self._generate_template_response(context, pattern)
+            else:
+                # Fallbck to template (yield full string at once)
+                yield self._generate_template_response(context, pattern)
+                
+        except Exception as e:
+            logger.error(f"Streaming generation failed: {e}")
+            yield "I am here for you."
+        finally:
+            latency_manager.observe("llm", (time.time() - start) * 1000.0)
     
     def _generate_llm_response(self, context: ResponseContext, pattern: Optional[Any]) -> str:
         """Generate response using LLM."""
@@ -232,7 +336,9 @@ class EmpathicResponseGenerator:
         response = self.llm_provider.generate_response(
             prompt,
             temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens
+            max_tokens=self.config.max_tokens,
+            top_p=self.config.top_p,
+            repeat_penalty=self.config.repeat_penalty
         )
         
         if not response:
@@ -251,6 +357,9 @@ class EmpathicResponseGenerator:
             context.empathy_style, 
             "Provide supportive and understanding responses"
         )
+        personality_traits = config.get('personality.personality_traits', [])
+        personality_name = config.get('personality.name', 'Tunda')
+        traits_text = ", ".join(personality_traits) if personality_traits else "caring, attentive"
         
         # Build conversation history
         history_text = ""
@@ -259,12 +368,25 @@ class EmpathicResponseGenerator:
             for exchange in recent_history:
                 history_text += f"User: {exchange.get('user', '')}\nAssistant: {exchange.get('assistant', '')}\n"
         
+        # Build relevant memories context
+        memories_text = ""
+        if context.relevant_memories:
+            max_memories = config.get("response_generation.max_memories", 3)
+            for memory in context.relevant_memories[:max_memories]:
+                text = memory.get("text", "")
+                if text:
+                    memories_text += f"- {text}\n"
+
         # Create prompt
-        prompt = f"""You are an empathic AI assistant. Your role is to provide compassionate, understanding responses.
+        prompt = f"""You are {personality_name}, an empathic AI assistant. Your role is to provide compassionate, understanding responses.
+Personality traits: {traits_text}
 
 Empathy Style: {style_description}
 
 Detected Emotion: {context.emotion} (confidence: {context.confidence:.2f})
+
+Relevant Past Memories:
+{memories_text}
 
 Recent Conversation:
 {history_text}
@@ -281,6 +403,36 @@ Instructions:
 Response:"""
         
         return prompt
+
+    def _select_llm_model_name(self) -> str:
+        profile = getattr(self.performance, "profile", "balanced")
+        models = getattr(self.performance, "llm_models", {}) or {}
+        default_model = self.config.model_name
+        candidate = models.get(profile, default_model)
+        if self._has_large_llm_budget():
+            return candidate
+        # Fall back to balanced or fast model if VRAM is low
+        return models.get("balanced", models.get("fast", default_model))
+    
+    def _select_max_tokens(self) -> int:
+        budget_ms = latency_manager.get_budget_ms()
+        max_tokens = self.config.max_tokens
+        if budget_ms <= 800:
+            return min(max_tokens, 120)
+        if budget_ms <= 1200:
+            return min(max_tokens, 160)
+        return max_tokens
+    
+    def _has_large_llm_budget(self) -> bool:
+        try:
+            import torch
+            if not torch.cuda.is_available():
+                return False
+            free_bytes, _ = torch.cuda.mem_get_info()
+            free_gb = free_bytes / (1024 ** 3)
+            return free_gb >= getattr(self.performance, "gpu_mem_min_gb_for_large_llm", 12.0)
+        except Exception:
+            return False
     
     def _generate_template_response(self, context: ResponseContext, pattern: Optional[Any]) -> str:
         """Generate response using templates."""

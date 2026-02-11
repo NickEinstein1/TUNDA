@@ -8,6 +8,27 @@ from dataclasses import dataclass
 
 
 @dataclass
+class PerformanceConfig:
+    profile: str = "balanced"
+    latency_budget_ms: int = 1200
+    latency_budget_min_ms: int = 600
+    latency_budget_max_ms: int = 2000
+    latency_ewma_alpha: float = 0.2
+    adaptive_latency_enabled: bool = True
+    gpu_mem_min_gb_for_large_stt: float = 10.0
+    gpu_mem_min_gb_for_large_llm: float = 12.0
+    llm_models: Dict[str, str] = None
+
+    def __post_init__(self):
+        if self.llm_models is None:
+            self.llm_models = {
+                "fast": "llama3.1:8b",
+                "balanced": "llama3.1:8b",
+                "quality": "llama3.1:70b"
+            }
+
+
+@dataclass
 class AudioConfig:
     sample_rate: int = 16000
     chunk_size: int = 1024
@@ -26,6 +47,25 @@ class SpeechRecognitionConfig:
     beam_size: int = 5
     best_of: int = 5
     patience: float = 1.0
+    device: Optional[str] = None
+    compute_type: str = "auto"
+    cpu_threads: Optional[int] = None
+    num_workers: int = 1
+    dynamic_model_switching: bool = False
+    short_model: str = "small"
+    long_model: str = "large-v3"
+    short_utterance_seconds: float = 4.0
+    vad_filter: bool = True
+    vad_threshold: float = 0.5
+    vad_min_silence_duration_ms: int = 300
+    vad_speech_pad_ms: int = 200
+    vad_adaptive: bool = True
+    vad_adaptive_min: float = 0.3
+    vad_adaptive_max: float = 0.8
+    vad_adaptive_scale: float = 1.8
+    vad_noise_percentile: float = 0.1
+    initial_prompt: Optional[str] = None
+    condition_on_previous_text: bool = True
 
 
 @dataclass
@@ -33,6 +73,8 @@ class EmotionDetectionConfig:
     enabled: bool = True
     model_type: str = "wav2vec2"
     confidence_threshold: float = 0.6
+    dl_model_name: str = "superb/wav2vec2-base-superb-er"
+    device: Optional[str] = None
     supported_emotions: list = None
     mfcc_coefficients: int = 13
     chroma_features: int = 12
@@ -52,6 +94,8 @@ class ResponseGenerationConfig:
     model_name: str = "llama3.1:8b"
     max_tokens: int = 150
     temperature: float = 0.7
+    top_p: float = 0.9
+    repeat_penalty: float = 1.1
     default_style: str = "supportive"
     empathy_styles: Dict[str, str] = None
 
@@ -104,8 +148,10 @@ class Config:
         self.config_path = Path(config_path)
         self._config_data = {}
         self.load_config()
+        self._apply_performance_profile()
         
         # Initialize configuration sections
+        self.performance = self._create_performance_config()
         self.audio = self._create_audio_config()
         self.speech_recognition = self._create_speech_recognition_config()
         self.emotion_detection = self._create_emotion_detection_config()
@@ -125,6 +171,7 @@ class Config:
     def save_config(self):
         """Save current configuration to YAML file."""
         config_dict = {
+            'performance': self.performance.__dict__,
             'audio': self.audio.__dict__,
             'speech_recognition': self.speech_recognition.__dict__,
             'emotion_detection': self.emotion_detection.__dict__,
@@ -136,6 +183,10 @@ class Config:
         with open(self.config_path, 'w', encoding='utf-8') as f:
             yaml.dump(config_dict, f, default_flow_style=False, indent=2)
     
+    def _create_performance_config(self) -> PerformanceConfig:
+        performance_data = self._config_data.get('performance', {})
+        return PerformanceConfig(**performance_data)
+
     def _create_audio_config(self) -> AudioConfig:
         audio_data = self._config_data.get('audio', {})
         return AudioConfig(**audio_data)
@@ -165,6 +216,46 @@ class Config:
     def _create_memory_config(self) -> MemoryConfig:
         memory_data = self._config_data.get('memory', {})
         return MemoryConfig(**memory_data)
+
+    def _apply_performance_profile(self):
+        """Apply performance profile overrides before creating configs."""
+        performance = self._config_data.get("performance", {})
+        profile = (performance.get("profile") or "balanced").lower()
+        if profile not in {"fast", "balanced", "quality"}:
+            profile = "balanced"
+        performance["profile"] = profile
+        self._config_data["performance"] = performance
+
+        if profile == "balanced":
+            return
+
+        speech = self._config_data.setdefault("speech_recognition", {})
+        emotion = self._config_data.setdefault("emotion_detection", {})
+        response = self._config_data.setdefault("response_generation", {})
+        tts = self._config_data.setdefault("text_to_speech", {})
+
+        if profile == "fast":
+            speech.setdefault("model", "small")
+            speech.setdefault("beam_size", 1)
+            speech.setdefault("best_of", 1)
+            speech.setdefault("compute_type", "int8")
+            emotion.setdefault("model_type", "random_forest")
+            response.setdefault("max_tokens", 120)
+            response.setdefault("temperature", 0.5)
+            response.setdefault("top_p", 0.9)
+            response.setdefault("repeat_penalty", 1.15)
+            tts.setdefault("emotion_adaptive", False)
+        elif profile == "quality":
+            speech.setdefault("model", "large-v3")
+            speech.setdefault("beam_size", 5)
+            speech.setdefault("best_of", 5)
+            speech.setdefault("compute_type", "float16")
+            emotion.setdefault("model_type", "wav2vec2")
+            response.setdefault("max_tokens", 220)
+            response.setdefault("temperature", 0.7)
+            response.setdefault("top_p", 0.9)
+            response.setdefault("repeat_penalty", 1.1)
+            tts.setdefault("emotion_adaptive", True)
     
     def get(self, key: str, default: Any = None) -> Any:
         """Get a configuration value by key path (e.g., 'web.host')."""

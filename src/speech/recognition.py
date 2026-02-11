@@ -1,6 +1,8 @@
 """Speech recognition module using OpenAI Whisper."""
 
 import whisper
+import os
+import time
 import numpy as np
 import torch
 import logging
@@ -11,6 +13,7 @@ import soundfile as sf
 from dataclasses import dataclass
 
 from ..utils.config import config
+from ..utils.performance import latency_manager
 from ..utils.audio import AudioProcessor
 
 logger = logging.getLogger(__name__)
@@ -53,7 +56,13 @@ class WhisperRecognizer:
                   temperature: float = 0.0,
                   beam_size: int = 5,
                   best_of: int = 5,
-                  patience: float = 1.0) -> TranscriptionResult:
+                  patience: float = 1.0,
+                  vad_filter: bool = True,
+                  vad_threshold: float = 0.5,
+                  vad_min_silence_duration_ms: int = 300,
+                  vad_speech_pad_ms: int = 200,
+                  initial_prompt: Optional[str] = None,
+                  condition_on_previous_text: bool = True) -> TranscriptionResult:
         """Transcribe audio to text."""
         import time
         start_time = time.time()
@@ -66,6 +75,7 @@ class WhisperRecognizer:
             audio = audio.astype(np.float32)
             
             # Transcribe using Whisper
+            _ = vad_filter, vad_threshold, vad_min_silence_duration_ms, vad_speech_pad_ms
             result = self.model.transcribe(
                 audio,
                 language=language,
@@ -73,6 +83,8 @@ class WhisperRecognizer:
                 beam_size=beam_size,
                 best_of=best_of,
                 patience=patience,
+                initial_prompt=initial_prompt,
+                condition_on_previous_text=condition_on_previous_text,
                 verbose=False
             )
             
@@ -130,9 +142,24 @@ class WhisperRecognizer:
 class FasterWhisperRecognizer:
     """Speech recognition using Faster-Whisper for better performance."""
     
-    def __init__(self, model_name: str = "base", device: Optional[str] = None):
+    def __init__(
+        self,
+        model_name: str = "base",
+        device: Optional[str] = None,
+        compute_type: str = "auto",
+        cpu_threads: Optional[int] = None,
+        num_workers: int = 1
+    ):
         self.model_name = model_name
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        if compute_type == "auto":
+            compute_type = "float16" if self.device == "cuda" else "int8"
+        self.compute_type = compute_type
+        if cpu_threads is None and self.device == "cpu":
+            cpu_count = os.cpu_count() or 2
+            cpu_threads = max(1, cpu_count - 1)
+        self.cpu_threads = cpu_threads
+        self.num_workers = max(1, num_workers)
         self.model = None
         self.audio_processor = AudioProcessor(sample_rate=16000)
         
@@ -151,7 +178,9 @@ class FasterWhisperRecognizer:
             self.model = self.WhisperModel(
                 self.model_name, 
                 device=self.device,
-                compute_type="float16" if self.device == "cuda" else "int8"
+                compute_type=self.compute_type,
+                cpu_threads=self.cpu_threads,
+                num_workers=self.num_workers
             )
             logger.info(f"Faster-Whisper model '{self.model_name}' loaded successfully")
         except Exception as e:
@@ -164,7 +193,13 @@ class FasterWhisperRecognizer:
                   temperature: float = 0.0,
                   beam_size: int = 5,
                   best_of: int = 5,
-                  patience: float = 1.0) -> TranscriptionResult:
+                  patience: float = 1.0,
+                  vad_filter: bool = True,
+                  vad_threshold: float = 0.5,
+                  vad_min_silence_duration_ms: int = 300,
+                  vad_speech_pad_ms: int = 200,
+                  initial_prompt: Optional[str] = None,
+                  condition_on_previous_text: bool = True) -> TranscriptionResult:
         """Transcribe audio to text using Faster-Whisper."""
         if self.model is None:
             raise RuntimeError("Faster-Whisper model not loaded")
@@ -178,13 +213,22 @@ class FasterWhisperRecognizer:
             audio = audio.astype(np.float32)
             
             # Transcribe using Faster-Whisper
+            vad_parameters = {
+                "threshold": vad_threshold,
+                "min_silence_duration_ms": vad_min_silence_duration_ms,
+                "speech_pad_ms": vad_speech_pad_ms
+            }
             segments, info = self.model.transcribe(
                 audio,
                 language=language,
                 temperature=temperature,
                 beam_size=beam_size,
                 best_of=best_of,
-                patience=patience
+                patience=patience,
+                vad_filter=vad_filter,
+                vad_parameters=vad_parameters,
+                initial_prompt=initial_prompt,
+                condition_on_previous_text=condition_on_previous_text
             )
             
             # Collect segments
@@ -268,38 +312,121 @@ class SpeechRecognitionPipeline:
     
     def __init__(self):
         self.config = config.speech_recognition
+        self.performance = config.performance
         self.recognizer = None
+        self.short_recognizer = None
+        self.long_recognizer = None
+        self.device = None
         self._initialize_recognizer()
+    
+    def _resolve_device(self) -> str:
+        if self.config.device:
+            return self.config.device
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    
+    def _resolve_model_name(self, device: str) -> str:
+        model_name = self.config.model
+        if model_name == "auto":
+            return "large-v3" if device == "cuda" else "small"
+        return model_name
     
     def _initialize_recognizer(self):
         """Initialize the appropriate recognizer."""
+        self.device = self._resolve_device()
+        model_name = self._resolve_model_name(self.device)
+        if self.config.dynamic_model_switching and self.device == "cuda":
+            self.short_recognizer = self._create_recognizer(self.config.short_model, self.device)
+            if self._has_large_stt_budget():
+                self.long_recognizer = self._create_recognizer(self.config.long_model, self.device)
+            else:
+                self.long_recognizer = self.short_recognizer
+            if self.short_recognizer and self.long_recognizer:
+                self.recognizer = self.short_recognizer
+                return
         try:
             # Try Faster-Whisper first for better performance
-            self.recognizer = FasterWhisperRecognizer(
-                model_name=self.config.model,
-                device=None  # Auto-detect
-            )
+            self.recognizer = self._create_recognizer(model_name, self.device)
             if self.recognizer.model is None:
                 raise RuntimeError("Faster-Whisper not available")
             logger.info("Using Faster-Whisper for speech recognition")
         except:
             # Fall back to standard Whisper
             self.recognizer = WhisperRecognizer(
-                model_name=self.config.model,
-                device=None  # Auto-detect
+                model_name=model_name,
+                device=self.device
             )
             logger.info("Using standard Whisper for speech recognition")
     
+    def _create_recognizer(self, model_name: str, device: str):
+        try:
+            recognizer = FasterWhisperRecognizer(
+                model_name=model_name,
+                device=device,
+                compute_type=self.config.compute_type,
+                cpu_threads=self.config.cpu_threads,
+                num_workers=self.config.num_workers
+            )
+            if recognizer.model is None:
+                raise RuntimeError("Faster-Whisper not available")
+            return recognizer
+        except Exception:
+            return WhisperRecognizer(model_name=model_name, device=device)
+
+    def _choose_recognizer(self, audio: np.ndarray):
+        if self.short_recognizer and self.long_recognizer:
+            duration = len(audio) / 16000
+            if self._is_latency_sensitive():
+                return self.short_recognizer
+            if duration <= self.config.short_utterance_seconds:
+                return self.short_recognizer
+            return self.long_recognizer
+        return self.recognizer
+    
+    def _adaptive_vad_threshold(self, audio: np.ndarray) -> float:
+        if not self.config.vad_adaptive:
+            return self.config.vad_threshold
+        if len(audio) == 0:
+            return self.config.vad_threshold
+        abs_audio = np.abs(audio.astype(np.float32))
+        noise_floor = np.percentile(abs_audio, max(1.0, self.config.vad_noise_percentile * 100))
+        threshold = max(self.config.vad_threshold, noise_floor * self.config.vad_adaptive_scale)
+        return float(np.clip(threshold, self.config.vad_adaptive_min, self.config.vad_adaptive_max))
+    
+    def _is_latency_sensitive(self) -> bool:
+        budget_ms = latency_manager.get_budget_ms()
+        return budget_ms <= 800
+    
+    def _has_large_stt_budget(self) -> bool:
+        if self.device != "cuda":
+            return False
+        try:
+            free_bytes, total_bytes = torch.cuda.mem_get_info()
+            free_gb = free_bytes / (1024 ** 3)
+            return free_gb >= getattr(self.performance, "gpu_mem_min_gb_for_large_stt", 10.0)
+        except Exception:
+            return False
+    
     def transcribe(self, audio: np.ndarray) -> TranscriptionResult:
         """Transcribe audio using configured settings."""
-        return self.recognizer.transcribe(
+        start = time.time()
+        recognizer = self._choose_recognizer(audio)
+        vad_threshold = self._adaptive_vad_threshold(audio)
+        result = recognizer.transcribe(
             audio,
             language=self.config.language if self.config.language != "auto" else None,
             temperature=self.config.temperature,
             beam_size=self.config.beam_size,
             best_of=self.config.best_of,
-            patience=self.config.patience
+            patience=self.config.patience,
+            vad_filter=self.config.vad_filter,
+            vad_threshold=vad_threshold,
+            vad_min_silence_duration_ms=self.config.vad_min_silence_duration_ms,
+            vad_speech_pad_ms=self.config.vad_speech_pad_ms,
+            initial_prompt=self.config.initial_prompt,
+            condition_on_previous_text=self.config.condition_on_previous_text
         )
+        latency_manager.observe("stt", (time.time() - start) * 1000.0)
+        return result
     
     def transcribe_file(self, file_path: str) -> TranscriptionResult:
         """Transcribe audio file."""
