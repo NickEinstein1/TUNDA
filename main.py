@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.utils.config import config
 from src.core.orchestrator import StreamOrchestrator
+from src.core.async_orchestrator import AsyncStreamOrchestrator
 
 # Configure logging
 logging.basicConfig(
@@ -33,22 +34,32 @@ def main():
     print("\n🚀 Starting TUNDA (Streaming Mode)...")
     print("🎤 Listening for voice input...")
     print("🛑 Press Ctrl+C to stop\n")
-    
-    orchestrator = StreamOrchestrator()
+    mode = config.get("orchestrator.mode", "threaded")
+    orchestrator = AsyncStreamOrchestrator() if mode == "async" else StreamOrchestrator()
     
     def signal_handler(signum, frame):
         print("\n👋 Stopping...")
-        orchestrator.stop()
+        if mode == "async":
+            orchestrator.stop_sync()
+        else:
+            orchestrator.stop()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
     
     try:
-        orchestrator.start()
-        
-        # Keep main thread alive
-        while True:
-            time.sleep(1.0)
+        if mode == "async":
+            import asyncio
+            async def runner():
+                await orchestrator.start()
+                while True:
+                    await asyncio.sleep(1.0)
+            asyncio.run(runner())
+        else:
+            orchestrator.start()
+            # Keep main thread alive
+            while True:
+                time.sleep(1.0)
             
     except Exception as e:
         logger.error(f"Application error: {e}")

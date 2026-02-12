@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from ..utils.config import config
 from ..utils.performance import latency_manager
+from ..core.plugins import get_stt
 from ..utils.audio import AudioProcessor
 
 logger = logging.getLogger(__name__)
@@ -317,7 +318,9 @@ class SpeechRecognitionPipeline:
         self.short_recognizer = None
         self.long_recognizer = None
         self.device = None
-        self._initialize_recognizer()
+        self.lazy_load = self.performance.lazy_load
+        if not self.lazy_load:
+            self._initialize_recognizer()
     
     def _resolve_device(self) -> str:
         if self.config.device:
@@ -334,6 +337,12 @@ class SpeechRecognitionPipeline:
         """Initialize the appropriate recognizer."""
         self.device = self._resolve_device()
         model_name = self._resolve_model_name(self.device)
+        plugin_name = self.config.plugin
+        if plugin_name:
+            factory = get_stt(plugin_name)
+            if factory:
+                self.recognizer = factory()
+                return
         if self.config.dynamic_model_switching and self.device == "cuda":
             self.short_recognizer = self._create_recognizer(self.config.short_model, self.device)
             if self._has_large_stt_budget():
@@ -373,6 +382,8 @@ class SpeechRecognitionPipeline:
             return WhisperRecognizer(model_name=model_name, device=device)
 
     def _choose_recognizer(self, audio: np.ndarray):
+        if self.recognizer is None:
+            self._initialize_recognizer()
         if self.short_recognizer and self.long_recognizer:
             duration = len(audio) / 16000
             if self._is_latency_sensitive():
@@ -427,6 +438,21 @@ class SpeechRecognitionPipeline:
         )
         latency_manager.observe("stt", (time.time() - start) * 1000.0)
         return result
+
+    def warm_up(self):
+        """Warm up STT models."""
+        dummy_audio = np.zeros(16000, dtype=np.float32)
+        try:
+            self.transcribe(dummy_audio)
+        except Exception:
+            pass
+
+    def health_check(self) -> Dict[str, Any]:
+        recognizer = self.recognizer or self.short_recognizer or self.long_recognizer
+        if recognizer is None:
+            return {"available": False, "engine": "none"}
+        engine = recognizer.__class__.__name__
+        return {"available": True, "engine": engine}
     
     def transcribe_file(self, file_path: str) -> TranscriptionResult:
         """Transcribe audio file."""

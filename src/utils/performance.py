@@ -54,3 +54,18 @@ class LatencyBudgetManager:
 
 
 latency_manager = LatencyBudgetManager()
+
+
+def get_gpu_stats():
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            return {"available": False}
+        free_bytes, total_bytes = torch.cuda.mem_get_info()
+        return {
+            "available": True,
+            "free_gb": free_bytes / (1024 ** 3),
+            "total_gb": total_bytes / (1024 ** 3),
+        }
+    except Exception:
+        return {"available": False}

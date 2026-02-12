@@ -15,6 +15,8 @@ class PerformanceConfig:
     latency_budget_max_ms: int = 2000
     latency_ewma_alpha: float = 0.2
     adaptive_latency_enabled: bool = True
+    prewarm_models: bool = True
+    lazy_load: bool = False
     gpu_mem_min_gb_for_large_stt: float = 10.0
     gpu_mem_min_gb_for_large_llm: float = 12.0
     llm_models: Dict[str, str] = None
@@ -51,6 +53,7 @@ class SpeechRecognitionConfig:
     compute_type: str = "auto"
     cpu_threads: Optional[int] = None
     num_workers: int = 1
+    plugin: Optional[str] = None
     dynamic_model_switching: bool = False
     short_model: str = "small"
     long_model: str = "large-v3"
@@ -75,6 +78,8 @@ class EmotionDetectionConfig:
     confidence_threshold: float = 0.6
     dl_model_name: str = "superb/wav2vec2-base-superb-er"
     device: Optional[str] = None
+    plugin: Optional[str] = None
+    lazy_load: bool = False
     supported_emotions: list = None
     mfcc_coefficients: int = 13
     chroma_features: int = 12
@@ -98,6 +103,15 @@ class ResponseGenerationConfig:
     repeat_penalty: float = 1.1
     default_style: str = "supportive"
     empathy_styles: Dict[str, str] = None
+    plugin: Optional[str] = None
+    lazy_load: bool = False
+    safety_enabled: bool = True
+    safety_confidence_threshold: float = 0.6
+    crisis_message: str = (
+        "I'm really sorry you're feeling this way. You deserve support. "
+        "If you are in immediate danger or thinking about harming yourself, "
+        "please contact your local emergency number or a trusted person right now."
+    )
 
     def __post_init__(self):
         if self.empathy_styles is None:
@@ -118,6 +132,9 @@ class TextToSpeechConfig:
     volume: float = 0.8
     emotion_adaptive: bool = True
     voice_mapping: Dict[str, str] = None
+    lazy_load: bool = False
+    streaming: bool = True
+    stream_chunk_chars: int = 140
 
     def __post_init__(self):
         if self.voice_mapping is None:
@@ -139,6 +156,13 @@ class MemoryConfig:
     context_window: int = 5
     save_conversations: bool = True
     conversation_file: str = "data/conversations.json"
+    max_items: int = 2000
+    prune_to: int = 1500
+    prune_strategy: str = "global"  # global, per_topic
+    importance_threshold: float = 0.2
+    batch_embeddings: bool = True
+    batch_size: int = 8
+    batch_flush_seconds: float = 1.5
 
 
 class Config:

@@ -150,6 +150,11 @@ class ConversationMemory:
                     logger.info(f"User name updated from {self.current_session.user_name} to {extracted_name}")
                     self.current_session.user_name = extracted_name
 
+            # Extract user preferences
+            preferences = self._extract_user_preferences(user_text)
+            if preferences:
+                self.current_session.user_preferences.update(preferences)
+
             # Auto-save periodically
             if len(self.current_session.turns) % 5 == 0:
                 self._save_conversations()
@@ -413,6 +418,30 @@ class ConversationMemory:
                     return name
 
         return None
+
+    def _extract_user_preferences(self, text: str) -> Dict[str, Any]:
+        """Extract user preferences like tone, verbosity, and language."""
+        import re
+        preferences: Dict[str, Any] = {}
+        text_lower = text.lower()
+
+        if re.search(r"\b(be|sound|respond)\b.*\bbrief|short\b", text_lower):
+            preferences["verbosity"] = "brief"
+        elif re.search(r"\b(be|sound|respond)\b.*\bverbose|detailed|long\b", text_lower):
+            preferences["verbosity"] = "detailed"
+
+        if "gentle tone" in text_lower or "soft tone" in text_lower:
+            preferences["tone"] = "gentle"
+        elif "direct tone" in text_lower or "straightforward" in text_lower:
+            preferences["tone"] = "direct"
+        elif "supportive tone" in text_lower or "encouraging" in text_lower:
+            preferences["tone"] = "supportive"
+
+        language_match = re.search(r"(speak|respond) in ([a-z\s]+)", text_lower)
+        if language_match:
+            preferences["language"] = language_match.group(2).strip()
+
+        return preferences
 
     def get_user_name(self) -> Optional[str]:
         """Get the current user's name if known."""

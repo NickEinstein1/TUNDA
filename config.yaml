@@ -8,6 +8,8 @@ performance:
   latency_budget_max_ms: 2000
   latency_ewma_alpha: 0.2
   adaptive_latency_enabled: true
+  prewarm_models: true
+  lazy_load: false
   gpu_mem_min_gb_for_large_stt: 10.0
   gpu_mem_min_gb_for_large_llm: 12.0
   llm_models:
@@ -41,6 +43,7 @@ speech_recognition:
   compute_type: "auto"  # auto, int8, int8_float16, float16, float32
   cpu_threads: null
   num_workers: 2
+  plugin: null
   dynamic_model_switching: true
   short_model: "small"
   long_model: "large-v3"
@@ -64,6 +67,8 @@ emotion_detection:
   confidence_threshold: 0.6
   dl_model_name: "superb/wav2vec2-base-superb-er"
   device: null  # "cpu", "cuda", or null for auto
+  plugin: null
+  lazy_load: false
   supported_emotions:
     - happy
     - sad
@@ -88,6 +93,11 @@ response_generation:
   top_p: 0.9
   repeat_penalty: 1.1
   max_memories: 3
+  plugin: null
+  lazy_load: false
+  safety_enabled: true
+  safety_confidence_threshold: 0.6
+  crisis_message: "I'm really sorry you're feeling this way. You deserve support. If you are in immediate danger or thinking about harming yourself, please contact your local emergency number or a trusted person right now."
   empathy_styles:
     supportive: "Provide warm, encouraging responses that validate emotions"
     reflective: "Mirror back emotions and help process feelings"
@@ -116,6 +126,9 @@ text_to_speech:
   pitch_adjustment: 0.0
   volume: 0.8
   emotion_adaptive: false  # Disable for better compatibility
+  lazy_load: false
+  streaming: true
+  stream_chunk_chars: 140
   voice_mapping:
     happy: "default"
     sad: "default"
@@ -133,6 +146,13 @@ memory:
   retrieval_limit: 3
   save_conversations: true
   conversation_file: "data/conversations.json"
+  max_items: 2000
+  prune_to: 1500
+  prune_strategy: "global"
+  importance_threshold: 0.2
+  batch_embeddings: true
+  batch_size: 8
+  batch_flush_seconds: 1.5
 
 # Web Interface
 web:
@@ -156,6 +176,10 @@ logging:
   max_file_size: "10MB"
   backup_count: 5
   console_output: true
+
+# Orchestrator
+orchestrator:
+  mode: "threaded"  # threaded, async
 
 # Model Paths
 models:

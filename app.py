@@ -20,6 +20,10 @@ import uvicorn
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.utils.config import config
+from src.utils.performance import latency_manager, get_gpu_stats
+from src.utils.tracing import new_trace_id, log_event
+from src.emotion.fusion import EmotionFusion
+from src.emotion.types import EmotionPrediction
 from src.speech.recognition import SpeechRecognitionPipeline
 from src.emotion.detector import EmotionDetector
 from src.response.generator import EmpathicResponseGenerator, ResponseContext
@@ -63,6 +67,12 @@ try:
     response_generator = EmpathicResponseGenerator()
     tts_pipeline = TextToSpeechPipeline()
     conversation_memory = ConversationMemory()
+    emotion_fusion = EmotionFusion()
+    if config.performance.prewarm_models:
+        speech_recognizer.warm_up()
+        emotion_detector.warm_up()
+        response_generator.warm_up()
+        tts_pipeline.warm_up()
     logger.info("All components initialized successfully")
 except Exception as e:
     logger.error(f"Failed to initialize components: {e}")
@@ -71,6 +81,7 @@ except Exception as e:
     response_generator = None
     tts_pipeline = None
     conversation_memory = None
+    emotion_fusion = None
 
 
 class ConnectionManager:
@@ -116,6 +127,31 @@ async def get_status():
             "conversation_memory": conversation_memory is not None
         },
         "llm_available": response_generator.is_llm_available() if response_generator else False
+    }
+
+
+@app.get("/api/health")
+async def get_health_details():
+    """Get component health details."""
+    return {
+        "status": "running",
+        "components": {
+            "speech_recognition": speech_recognizer.health_check() if speech_recognizer else {"available": False},
+            "emotion_detection": {"available": emotion_detector is not None},
+            "response_generation": response_generator.health_check() if response_generator else {"available": False},
+            "text_to_speech": tts_pipeline.health_check() if tts_pipeline else {"available": False},
+            "conversation_memory": conversation_memory is not None
+        },
+        "llm_available": response_generator.is_llm_available() if response_generator else False
+    }
+
+
+@app.get("/api/performance")
+async def get_performance():
+    """Get live performance stats."""
+    return {
+        "latency": latency_manager.snapshot(),
+        "gpu": get_gpu_stats()
     }
 
 
@@ -202,6 +238,8 @@ async def handle_text_input(client_id: str, message: dict):
         user_text = message.get("text", "").strip()
         if not user_text:
             return
+        trace_id = new_trace_id()
+        log_event(logger, "web_text_received", trace_id, client_id=client_id, text=user_text)
 
         # Send processing status
         await manager.send_message(client_id, {
@@ -211,6 +249,15 @@ async def handle_text_input(client_id: str, message: dict):
 
         # For text input, we'll use a simple emotion detection based on keywords
         emotion_result = detect_emotion_from_text(user_text)
+        if emotion_fusion:
+            audio_pred = EmotionPrediction(
+                emotion=emotion_result["emotion"],
+                confidence=emotion_result["confidence"],
+                probabilities={emotion_result["emotion"]: emotion_result["confidence"]},
+                features_used=0
+            )
+            fused = emotion_fusion.fuse(audio_pred, user_text, 1.0)
+            emotion_result = {"emotion": fused.emotion, "confidence": fused.confidence}
 
         # Save to conversation memory first to extract name
         if conversation_memory:
@@ -247,6 +294,7 @@ async def handle_text_input(client_id: str, message: dict):
         )
 
         empathic_response = response_generator.generate_response(response_context)
+        log_event(logger, "web_response", trace_id, response=empathic_response.text[:200])
 
         # Update the last conversation turn with the response
         if conversation_memory and conversation_memory.current_session and conversation_memory.current_session.turns:

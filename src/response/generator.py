@@ -10,6 +10,8 @@ import time
 
 from ..utils.config import config
 from ..utils.performance import latency_manager
+from ..core.plugins import get_llm
+from .safety import SafetyGuard
 from .empathy import EmpathyPatterns
 from .care_plans import CarePlanGenerator
 from ..emotion.detector import EmotionPrediction
@@ -238,7 +240,10 @@ class EmpathicResponseGenerator:
         self.personality_name = config.get('personality.name', 'Tunda')
         self.ask_about_day = config.get('personality.ask_about_day', True)
         self.offer_care_plans = config.get('personality.offer_care_plans', True)
-        self._initialize_llm_provider()
+        self.safety_guard = SafetyGuard()
+        self.lazy_load = self.config.lazy_load or self.performance.lazy_load
+        if not self.lazy_load:
+            self._initialize_llm_provider()
     
     def _initialize_llm_provider(self):
         """Initialize the appropriate LLM provider."""
@@ -247,6 +252,12 @@ class EmpathicResponseGenerator:
         max_tokens = self._select_max_tokens()
         self.config.model_name = model_name
         self.config.max_tokens = max_tokens
+        plugin_name = self.config.plugin
+        if plugin_name:
+            factory = get_llm(plugin_name)
+            if factory:
+                self.llm_provider = factory()
+                return
         
         if provider_name == "ollama":
             self.llm_provider = OllamaProvider(model_name=model_name)
@@ -269,6 +280,18 @@ class EmpathicResponseGenerator:
         start_time = time.time()
         
         try:
+            if self.lazy_load and self.llm_provider is None:
+                self._initialize_llm_provider()
+            safety = self.safety_guard.assess(context.user_text)
+            if safety.is_crisis:
+                return EmpathicResponse(
+                    text=safety.response or "I'm here for you.",
+                    emotion_addressed=context.emotion,
+                    empathy_style=context.empathy_style,
+                    confidence=max(context.confidence, safety.confidence),
+                    generation_time=time.time() - start_time,
+                    follow_up_suggested=True
+                )
             # Get empathy pattern
             pattern = self.empathy_patterns.get_pattern(context.emotion, context.empathy_style)
             
@@ -294,11 +317,19 @@ class EmpathicResponseGenerator:
         except Exception as e:
             logger.error(f"Response generation failed: {e}")
             return self._generate_fallback_response(context, time.time() - start_time)
+        finally:
+            latency_manager.observe("llm", (time.time() - start_time) * 1000.0)
 
     def generate_response_stream(self, context: ResponseContext) -> Iterator[str]:
         """Generate streaming response tokens."""
         start = time.time()
         try:
+            if self.lazy_load and self.llm_provider is None:
+                self._initialize_llm_provider()
+            safety = self.safety_guard.assess(context.user_text)
+            if safety.is_crisis:
+                yield safety.response or "I'm here for you."
+                return
             # Get empathy pattern
             pattern = self.empathy_patterns.get_pattern(context.emotion, context.empathy_style)
             
@@ -378,8 +409,20 @@ class EmpathicResponseGenerator:
                     memories_text += f"- {text}\n"
 
         # Create prompt
+        tone = context.user_preferences.get("tone")
+        verbosity = context.user_preferences.get("verbosity")
+        language = context.user_preferences.get("language")
+        preference_text = ""
+        if tone:
+            preference_text += f"Preferred tone: {tone}\n"
+        if verbosity:
+            preference_text += f"Preferred verbosity: {verbosity}\n"
+        if language:
+            preference_text += f"Preferred language: {language}\n"
+
         prompt = f"""You are {personality_name}, an empathic AI assistant. Your role is to provide compassionate, understanding responses.
 Personality traits: {traits_text}
+{preference_text}
 
 Empathy Style: {style_description}
 
@@ -665,3 +708,22 @@ Response:"""
     def is_llm_available(self) -> bool:
         """Check if LLM provider is available."""
         return self.llm_provider is not None and self.llm_provider.is_available()
+
+    def health_check(self) -> Dict[str, Any]:
+        provider = self.llm_provider.__class__.__name__ if self.llm_provider else "template"
+        return {"available": self.is_llm_available(), "provider": provider}
+
+    def warm_up(self):
+        context = ResponseContext(
+            user_text="Hello",
+            emotion="neutral",
+            confidence=0.5,
+            conversation_history=[],
+            empathy_style=self.config.default_style,
+            user_preferences={"user_name": "Friend"},
+            relevant_memories=[]
+        )
+        try:
+            _ = self.generate_response(context)
+        except Exception:
+            pass

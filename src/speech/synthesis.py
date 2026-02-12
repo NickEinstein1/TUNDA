@@ -5,7 +5,7 @@ import logging
 import tempfile
 import subprocess
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from pathlib import Path
 from dataclasses import dataclass
 import time
@@ -316,10 +316,12 @@ class TextToSpeechPipeline:
     
     def __init__(self):
         self.config = config.text_to_speech
-        self.provider = PiperTTSProvider()
+        self.provider = None if self.config.lazy_load or config.performance.lazy_load else PiperTTSProvider()
     
     def synthesize(self, text: str, emotion: Optional[str] = None) -> SynthesisResult:
         """Synthesize speech with emotion-appropriate voice."""
+        if self.provider is None:
+            self.provider = PiperTTSProvider()
         # Choose voice based on emotion
         voice = self._choose_voice_for_emotion(emotion)
         
@@ -334,6 +336,13 @@ class TextToSpeechPipeline:
             result.audio = self._apply_emotion_processing(result.audio, emotion)
         
         return result
+
+    def synthesize_stream(self, text: str, emotion: Optional[str] = None):
+        """Yield audio chunks for streaming playback."""
+        chunks = self._split_text_for_stream(text)
+        for chunk in chunks:
+            if chunk.strip():
+                yield self.synthesize(chunk, emotion=emotion)
     
     def _choose_voice_for_emotion(self, emotion: Optional[str]) -> str:
         """Choose appropriate voice for emotion."""
@@ -369,6 +378,23 @@ class TextToSpeechPipeline:
                 text += '.'
         
         return text
+
+    def _split_text_for_stream(self, text: str) -> List[str]:
+        if not self.config.streaming:
+            return [text]
+        max_chars = max(40, self.config.stream_chunk_chars)
+        segments = []
+        current = ""
+        for part in text.split(". "):
+            if len(current) + len(part) + 2 <= max_chars:
+                current = f"{current} {part}".strip()
+            else:
+                if current:
+                    segments.append(current)
+                current = part
+        if current:
+            segments.append(current)
+        return segments
     
     def _apply_emotion_processing(self, audio: np.ndarray, emotion: Optional[str]) -> np.ndarray:
         """Apply emotion-specific audio processing."""
@@ -443,8 +469,23 @@ class TextToSpeechPipeline:
     
     def is_available(self) -> bool:
         """Check if TTS is available."""
+        if self.provider is None:
+            self.provider = PiperTTSProvider()
         return self.provider.is_available()
     
     def get_available_voices(self) -> Dict[str, str]:
         """Get available voices."""
+        if self.provider is None:
+            self.provider = PiperTTSProvider()
         return self.provider.get_available_voices()
+
+    def warm_up(self):
+        try:
+            _ = self.synthesize("Hello", emotion="neutral")
+        except Exception:
+            pass
+
+    def health_check(self) -> Dict[str, Any]:
+        available = self.is_available()
+        provider = self.provider.__class__.__name__ if self.provider else "none"
+        return {"available": available, "provider": provider}

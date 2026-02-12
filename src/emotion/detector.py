@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 
 from ..utils.config import config
+from ..core.plugins import get_emotion
 from .features import AudioFeatureExtractor, AudioFeatures
 from .dl_detector import DeepLearningEmotionDetector
 from .types import EmotionPrediction
@@ -31,11 +32,22 @@ class EmotionDetector:
         self.scaler = None
         self.emotion_labels = self.config.supported_emotions
         self.model_path = config.get_model_path("emotion_model")
+        self.lazy_load = self.config.lazy_load or config.performance.lazy_load
         
         # Check model type from config
         self.model_type = getattr(self.config, 'model_type', 'random_forest')
         self.dl_detector = None
+        self.plugin = self.config.plugin
         
+        if not self.lazy_load:
+            self._initialize_models()
+    
+    def _initialize_models(self):
+        if self.plugin:
+            factory = get_emotion(self.plugin)
+            if factory:
+                self.dl_detector = factory()
+                return
         if self.model_type == 'wav2vec2':
             self.dl_detector = DeepLearningEmotionDetector()
             if self.dl_detector.pipeline is None:
@@ -222,6 +234,8 @@ class EmotionDetector:
     def predict_emotion(self, audio: np.ndarray) -> EmotionPrediction:
         """Predict emotion from audio."""
         try:
+            if self.lazy_load and self.dl_detector is None and self.model is None:
+                self._initialize_models()
             if self.model_type == 'wav2vec2' and self.dl_detector:
                 return self.dl_detector.predict_emotion(audio)
 
@@ -279,6 +293,13 @@ class EmotionDetector:
         except Exception as e:
             logger.error(f"Emotion prediction failed: {e}")
             return self._default_prediction()
+
+    def warm_up(self):
+        dummy = np.zeros(16000, dtype=np.float32)
+        try:
+            self.predict_emotion(dummy)
+        except Exception:
+            pass
     
     def _rule_based_prediction(self, features: AudioFeatures) -> EmotionPrediction:
         """Simple rule-based emotion prediction."""
