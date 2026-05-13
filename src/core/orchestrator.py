@@ -203,7 +203,10 @@ class StreamOrchestrator:
                 emotion_pred = None
             if emotion_pred is None:
                 emotion_pred = self.emotion_detector._default_prediction()
-            emotion_pred = self.emotion_fusion.fuse(emotion_pred, text, transcription.confidence)
+            fusion_boost = self.conversation_memory.get_fusion_text_boost() if self.conversation_memory else 0.0
+            emotion_pred = self.emotion_fusion.fuse(
+                emotion_pred, text, transcription.confidence, text_boost=fusion_boost
+            )
             logger.info(f"Emotion: {emotion_pred.emotion} ({emotion_pred.confidence:.2f})")
             log_event(
                 logger,
@@ -245,8 +248,10 @@ class StreamOrchestrator:
                 full_response += token
                 current_sentence += token
                 if any(punct in token for punct in ['.', '!', '?']):
-                    # Send sentence to synthesis
-                    self.synthesis_queue.put((current_sentence, emotion_pred.emotion))
+                    try:
+                        self.synthesis_queue.put((current_sentence, emotion_pred.emotion), timeout=0.2)
+                    except queue.Full:
+                        logger.warning("Synthesis queue full. Dropping sentence.")
                     current_sentence = ""
             
             if current_sentence.strip():
