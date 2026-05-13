@@ -151,7 +151,10 @@ class AsyncStreamOrchestrator:
             if not text:
                 continue
             emotion_pred = self.emotion_detector.predict_emotion(audio)
-            emotion_pred = self.emotion_fusion.fuse(emotion_pred, text, transcription.confidence)
+            fusion_boost = self.conversation_memory.get_fusion_text_boost() if self.conversation_memory else 0.0
+            emotion_pred = self.emotion_fusion.fuse(
+                emotion_pred, text, transcription.confidence, text_boost=fusion_boost
+            )
 
             relevant_memories = self.memory.retrieve_relevant(text, limit=self.config.get("memory.retrieval_limit", 3))
             conversation_history = []
