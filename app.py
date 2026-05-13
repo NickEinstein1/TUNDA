@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 import json
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
@@ -225,6 +225,10 @@ async def handle_websocket_message(client_id: str, message: dict):
         await handle_audio_input(client_id, message)
     elif message_type == "get_emotion_patterns":
         await handle_get_emotion_patterns(client_id)
+    elif message_type == "emotion_feedback":
+        await handle_emotion_feedback(client_id, message)
+    elif message_type == "response_feedback":
+        await handle_response_feedback(client_id, message)
     else:
         await manager.send_message(client_id, {
             "type": "error",
@@ -241,6 +245,10 @@ async def handle_text_input(client_id: str, message: dict):
         trace_id = new_trace_id()
         log_event(logger, "web_text_received", trace_id, client_id=client_id, text=user_text)
 
+        rm = message.get("response_mode")
+        if rm in {"listen", "coach"} and conversation_memory:
+            conversation_memory.set_response_mode_preference(rm)
+
         # Send processing status
         await manager.send_message(client_id, {
             "type": "processing",
@@ -256,7 +264,10 @@ async def handle_text_input(client_id: str, message: dict):
                 probabilities={emotion_result["emotion"]: emotion_result["confidence"]},
                 features_used=0
             )
-            fused = emotion_fusion.fuse(audio_pred, user_text, 1.0)
+            boost = conversation_memory.get_fusion_text_boost() if conversation_memory else 0.0
+            fused = emotion_fusion.fuse(
+                audio_pred, user_text, 1.0, text_boost=boost
+            )
             emotion_result = {"emotion": fused.emotion, "confidence": fused.confidence}
 
         # Save to conversation memory first to extract name
@@ -312,7 +323,9 @@ async def handle_text_input(client_id: str, message: dict):
             "response_text": empathic_response.text,
             "empathy_style": empathic_response.empathy_style,
             "response_confidence": empathic_response.confidence,
-            "user_name": user_name  # Include the extracted name
+            "user_name": user_name,
+            "interaction_mode": empathic_response.interaction_mode,
+            "fusion_text_boost": conversation_memory.get_fusion_text_boost() if conversation_memory else 0.0,
         })
         
     except Exception as e:
@@ -349,6 +362,39 @@ async def handle_audio_input(client_id: str, message: dict):
             "type": "error",
             "message": f"Error processing audio: {str(e)}"
         })
+
+
+async def handle_emotion_feedback(client_id: str, message: dict):
+    """Calibration: user confirms or corrects detected emotion."""
+    if not conversation_memory:
+        await manager.send_message(client_id, {
+            "type": "error",
+            "message": "Conversation memory not available"
+        })
+        return
+    match = message.get("match", True)
+    felt = message.get("felt_emotion")
+    conversation_memory.record_emotion_feedback(bool(match), felt)
+    await manager.send_message(client_id, {
+        "type": "emotion_feedback_ack",
+        "fusion_text_boost": conversation_memory.get_fusion_text_boost(),
+    })
+
+
+async def handle_response_feedback(client_id: str, message: dict):
+    """Calibration: whether the last reply felt helpful."""
+    if not conversation_memory:
+        await manager.send_message(client_id, {
+            "type": "error",
+            "message": "Conversation memory not available"
+        })
+        return
+    helpful = message.get("helpful", True)
+    conversation_memory.record_response_feedback(bool(helpful))
+    await manager.send_message(client_id, {
+        "type": "response_feedback_ack",
+        "fusion_text_boost": conversation_memory.get_fusion_text_boost(),
+    })
 
 
 async def handle_get_emotion_patterns(client_id: str):
@@ -411,7 +457,12 @@ def create_web_files():
     templates_dir.mkdir(parents=True, exist_ok=True)
     static_dir.mkdir(parents=True, exist_ok=True)
     
-    # Create index.html
+    index_path = templates_dir / "index.html"
+    if index_path.exists():
+        logger.info("Keeping existing %s", index_path)
+        return
+
+    # Create index.html (bootstrap only if missing — edit web/templates/index.html in repo)
     index_html = '''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1527,7 +1578,7 @@ def create_web_files():
 </body>
 </html>'''
     
-    with open(templates_dir / "index.html", "w", encoding="utf-8") as f:
+    with open(index_path, "w", encoding="utf-8") as f:
         f.write(index_html)
 
 
