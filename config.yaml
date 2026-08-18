@@ -97,6 +97,10 @@ response_generation:
   lazy_load: false
   safety_enabled: true
   safety_confidence_threshold: 0.6
+  safety_region: "US"  # US, CA, UK, IE, AU, NZ, IN
+  safety_log_events: true
+  safety_log_user_text: false
+  safety_log_path: "logs/crisis_events.jsonl"
   crisis_message: "I'm really sorry you're feeling this way. You deserve support. If you are in immediate danger or thinking about harming yourself, please contact your local emergency number or a trusted person right now."
   empathy_styles:
     supportive: "Provide warm, encouraging responses that validate emotions"
@@ -125,7 +129,11 @@ text_to_speech:
   speaking_rate: 1.0
   pitch_adjustment: 0.0
   volume: 0.8
-  emotion_adaptive: false  # Disable for better compatibility
+  emotion_adaptive: true
+  barge_in: true
+  barge_in_min_chunks: 4
+  barge_in_energy_multiplier: 2.4
+  barge_in_grace_ms: 350
   lazy_load: false
   streaming: true
   stream_chunk_chars: 140

@@ -158,6 +158,51 @@ class ConversationMemory:
             # Auto-save periodically
             if len(self.current_session.turns) % 5 == 0:
                 self._save_conversations()
+
+    def get_fusion_text_boost(self) -> float:
+        """Calibration 0–~0.45: higher means trust words over audio more."""
+        if not self.current_session:
+            return 0.0
+        return float(self.current_session.user_preferences.get("fusion_text_boost", 0.0))
+
+    def record_emotion_feedback(self, detected_match: bool, felt_emotion: Optional[str] = None):
+        """User calibration for emotion detection (e.g. thumbs on detected mood)."""
+        if not self.current_session:
+            self.start_new_session()
+        with self.lock:
+            prefs = self.current_session.user_preferences
+            boost = float(prefs.get("fusion_text_boost", 0.0))
+            if not detected_match:
+                boost = min(0.45, boost + 0.06)
+            else:
+                boost = max(0.0, boost - 0.03)
+            prefs["fusion_text_boost"] = boost
+            if felt_emotion:
+                prefs["last_stated_emotion"] = felt_emotion
+
+    def record_response_feedback(self, helpful: bool):
+        """Soft calibration from whether the last reply felt helpful."""
+        if not self.current_session:
+            self.start_new_session()
+        with self.lock:
+            prefs = self.current_session.user_preferences
+            boost = float(prefs.get("fusion_text_boost", 0.0))
+            if helpful:
+                prefs["fusion_text_boost"] = max(0.0, boost - 0.02)
+            else:
+                prefs["fusion_text_boost"] = min(0.45, boost + 0.03)
+
+    def set_response_mode_preference(self, mode: Optional[str]):
+        """Persist listen vs coach stance when user selects it in UI."""
+        if mode not in {None, "", "listen", "coach"}:
+            return
+        if not self.current_session:
+            self.start_new_session()
+        with self.lock:
+            if mode:
+                self.current_session.user_preferences["response_mode"] = mode
+            else:
+                self.current_session.user_preferences.pop("response_mode", None)
     
     def get_conversation_context(self, window_size: Optional[int] = None) -> List[Dict[str, str]]:
         """Get recent conversation context."""
@@ -440,6 +485,11 @@ class ConversationMemory:
         language_match = re.search(r"(speak|respond) in ([a-z\s]+)", text_lower)
         if language_match:
             preferences["language"] = language_match.group(2).strip()
+
+        if re.search(r"\b(listen-?only|just reflect|don'?t (give )?advice)\b", text_lower):
+            preferences["response_mode"] = "listen"
+        elif re.search(r"\b(coaching mode|coping tips|practical (tips|steps))\b", text_lower):
+            preferences["response_mode"] = "coach"
 
         return preferences
 

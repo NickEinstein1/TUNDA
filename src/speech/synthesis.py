@@ -12,6 +12,7 @@ import time
 
 from ..utils.config import config
 from ..utils.audio import AudioProcessor
+from .voice import apply_speech_profile, get_speech_profile
 
 logger = logging.getLogger(__name__)
 
@@ -397,28 +398,12 @@ class TextToSpeechPipeline:
         return segments
     
     def _apply_emotion_processing(self, audio: np.ndarray, emotion: Optional[str]) -> np.ndarray:
-        """Apply emotion-specific audio processing."""
+        """Apply care-first emotion-adaptive rate, pitch, and volume."""
         if not emotion or len(audio) == 0:
             return audio
-        
         try:
-            # Simple emotion-based processing
-            if emotion == 'happy':
-                # Slightly increase pitch and tempo
-                audio = self._adjust_pitch(audio, factor=1.1)
-            elif emotion == 'sad':
-                # Slightly decrease pitch and tempo
-                audio = self._adjust_pitch(audio, factor=0.9)
-            elif emotion == 'angry':
-                # Increase volume and add slight distortion
-                audio = audio * 1.2
-                audio = np.clip(audio, -1.0, 1.0)
-            elif emotion == 'calm':
-                # Smooth and soften
-                audio = self._smooth_audio(audio)
-            
-            return audio
-            
+            profile = get_speech_profile(emotion)
+            return apply_speech_profile(audio, self.provider.audio_processor.sample_rate, profile)
         except Exception as e:
             logger.warning(f"Emotion processing failed: {e}")
             return audio

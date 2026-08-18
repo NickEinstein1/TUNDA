@@ -28,6 +28,7 @@ from src.speech.recognition import SpeechRecognitionPipeline
 from src.emotion.detector import EmotionDetector
 from src.response.generator import EmpathicResponseGenerator, ResponseContext
 from src.speech.synthesis import TextToSpeechPipeline
+from src.speech.voice import speech_settings_for
 from src.memory.conversation import ConversationMemory
 
 # Configure logging
@@ -110,7 +111,13 @@ manager = ConnectionManager()
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    """Home page."""
+    """Landing page."""
+    return templates.TemplateResponse("landing.html", {"request": request})
+
+
+@app.get("/app", response_class=HTMLResponse)
+async def app_home(request: Request):
+    """Main chat application."""
     return templates.TemplateResponse("index.html", {"request": request})
 
 
@@ -143,6 +150,18 @@ async def get_health_details():
             "conversation_memory": conversation_memory is not None
         },
         "llm_available": response_generator.is_llm_available() if response_generator else False
+    }
+
+
+@app.get("/api/crisis-regions")
+async def get_crisis_regions():
+    """Local emergency and crisis numbers by region."""
+    from src.response.safety import list_crisis_regions
+
+    default_region = getattr(config.response_generation, "safety_region", "US")
+    return {
+        "default": default_region,
+        "regions": list_crisis_regions(),
     }
 
 
@@ -294,6 +313,12 @@ async def handle_text_input(client_id: str, message: dict):
         # Add user name to preferences if known
         if user_name:
             user_preferences['user_name'] = user_name
+        user_preferences['session_id'] = client_id
+        region = (message.get("region") or "").strip().upper()
+        if region:
+            user_preferences["region"] = region
+            if conversation_memory:
+                conversation_memory.update_user_preferences({"region": region})
 
         response_context = ResponseContext(
             user_text=user_text,
@@ -326,6 +351,12 @@ async def handle_text_input(client_id: str, message: dict):
             "user_name": user_name,
             "interaction_mode": empathic_response.interaction_mode,
             "fusion_text_boost": conversation_memory.get_fusion_text_boost() if conversation_memory else 0.0,
+            "speech": speech_settings_for(
+                emotion_result["emotion"],
+                empathic_response.interaction_mode,
+            ),
+            "safety_tier": empathic_response.safety_tier,
+            "crisis_resources": empathic_response.crisis_resources,
         })
         
     except Exception as e:

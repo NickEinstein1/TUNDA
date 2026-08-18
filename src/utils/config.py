@@ -39,6 +39,10 @@ class AudioConfig:
     output_device: Optional[int] = None
     silence_threshold: float = 0.01
     silence_duration: float = 2.0
+    min_speech_seconds: float = 0.3
+    max_segment_seconds: float = 20.0
+    queue_maxsize: int = 10
+    noise_reduction: bool = False
 
 
 @dataclass
@@ -103,10 +107,16 @@ class ResponseGenerationConfig:
     repeat_penalty: float = 1.1
     default_style: str = "supportive"
     empathy_styles: Dict[str, str] = None
+    max_memories: int = 3
     plugin: Optional[str] = None
     lazy_load: bool = False
     safety_enabled: bool = True
     safety_confidence_threshold: float = 0.6
+    safety_region: str = "US"
+    safety_log_events: bool = True
+    safety_log_user_text: bool = False
+    safety_log_path: str = "logs/crisis_events.jsonl"
+    crisis_resources: Optional[Dict[str, str]] = None
     crisis_message: str = (
         "I'm really sorry you're feeling this way. You deserve support. "
         "If you are in immediate danger or thinking about harming yourself, "
@@ -131,6 +141,10 @@ class TextToSpeechConfig:
     pitch_adjustment: float = 0.0
     volume: float = 0.8
     emotion_adaptive: bool = True
+    barge_in: bool = True
+    barge_in_min_chunks: int = 4
+    barge_in_energy_multiplier: float = 2.4
+    barge_in_grace_ms: int = 350
     voice_mapping: Dict[str, str] = None
     lazy_load: bool = False
     streaming: bool = True
@@ -154,6 +168,7 @@ class MemoryConfig:
     max_history_length: int = 50
     emotion_history_window: int = 10
     context_window: int = 5
+    retrieval_limit: int = 3
     save_conversations: bool = True
     conversation_file: str = "data/conversations.json"
     max_items: int = 2000
@@ -230,11 +245,26 @@ class Config:
         return EmotionDetectionConfig(**merged_data)
     
     def _create_response_generation_config(self) -> ResponseGenerationConfig:
-        rg_data = self._config_data.get('response_generation', {})
+        rg_data = dict(self._config_data.get('response_generation', {}))
+        allowed = ResponseGenerationConfig.__dataclass_fields__.keys()
+        rg_data = {k: v for k, v in rg_data.items() if k in allowed}
         return ResponseGenerationConfig(**rg_data)
     
     def _create_text_to_speech_config(self) -> TextToSpeechConfig:
-        tts_data = self._config_data.get('text_to_speech', {})
+        tts_data = dict(self._config_data.get('text_to_speech', {}))
+        aliases = {
+            "speaking_rate": "speaking_rate",
+            "pitch_adjustment": "pitch_adjustment",
+            "emotion_adaptive": "emotion_adaptive",
+            "voice_model": "voice_model",
+        }
+        for src, dest in aliases.items():
+            if src in tts_data and dest not in tts_data:
+                tts_data[dest] = tts_data.pop(src)
+            elif src in tts_data and src != dest:
+                tts_data.pop(src, None)
+        allowed = TextToSpeechConfig.__dataclass_fields__.keys()
+        tts_data = {k: v for k, v in tts_data.items() if k in allowed}
         return TextToSpeechConfig(**tts_data)
     
     def _create_memory_config(self) -> MemoryConfig:

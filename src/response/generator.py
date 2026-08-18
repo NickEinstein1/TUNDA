@@ -12,6 +12,7 @@ from ..utils.config import config
 from ..utils.performance import latency_manager
 from ..core.plugins import get_llm
 from .safety import SafetyGuard
+from .mode_router import InteractionModeRouter, mode_instructions
 from .empathy import EmpathyPatterns
 from .care_plans import CarePlanGenerator
 from ..emotion.detector import EmotionPrediction
@@ -29,6 +30,7 @@ class ResponseContext:
     empathy_style: str
     user_preferences: Dict[str, Any]
     relevant_memories: List[Dict[str, Any]] = None
+    interaction_mode: str = "listen"
 
     def __post_init__(self):
         if self.relevant_memories is None:
@@ -44,6 +46,9 @@ class EmpathicResponse:
     confidence: float
     generation_time: float
     follow_up_suggested: bool
+    interaction_mode: str = "listen"
+    safety_tier: str = "none"
+    crisis_resources: Optional[Dict[str, str]] = None
 
 
 class LLMProvider:
@@ -241,6 +246,7 @@ class EmpathicResponseGenerator:
         self.ask_about_day = config.get('personality.ask_about_day', True)
         self.offer_care_plans = config.get('personality.offer_care_plans', True)
         self.safety_guard = SafetyGuard()
+        self.mode_router = InteractionModeRouter()
         self.lazy_load = self.config.lazy_load or self.performance.lazy_load
         if not self.lazy_load:
             self._initialize_llm_provider()
@@ -282,7 +288,7 @@ class EmpathicResponseGenerator:
         try:
             if self.lazy_load and self.llm_provider is None:
                 self._initialize_llm_provider()
-            safety = self.safety_guard.assess(context.user_text)
+            safety = self._assess_safety(context)
             if safety.is_crisis:
                 return EmpathicResponse(
                     text=safety.response or "I'm here for you.",
@@ -290,8 +296,12 @@ class EmpathicResponseGenerator:
                     empathy_style=context.empathy_style,
                     confidence=max(context.confidence, safety.confidence),
                     generation_time=time.time() - start_time,
-                    follow_up_suggested=True
+                    follow_up_suggested=True,
+                    interaction_mode="escalate",
+                    safety_tier=safety.tier,
+                    crisis_resources=safety.resources or None,
                 )
+            self._apply_interaction_mode(context)
             # Get empathy pattern
             pattern = self.empathy_patterns.get_pattern(context.emotion, context.empathy_style)
             
@@ -302,6 +312,9 @@ class EmpathicResponseGenerator:
             
             generation_time = time.time() - start_time
             
+            if safety.support_note:
+                response_text = f"{response_text.rstrip()}{safety.support_note}"
+
             # Determine if follow-up is suggested
             follow_up_suggested = self._should_suggest_follow_up(context, response_text)
             
@@ -311,7 +324,10 @@ class EmpathicResponseGenerator:
                 empathy_style=context.empathy_style,
                 confidence=context.confidence,
                 generation_time=generation_time,
-                follow_up_suggested=follow_up_suggested
+                follow_up_suggested=follow_up_suggested,
+                interaction_mode=context.interaction_mode,
+                safety_tier=safety.tier,
+                crisis_resources=safety.resources if safety.support_note else None,
             )
             
         except Exception as e:
@@ -326,10 +342,11 @@ class EmpathicResponseGenerator:
         try:
             if self.lazy_load and self.llm_provider is None:
                 self._initialize_llm_provider()
-            safety = self.safety_guard.assess(context.user_text)
+            safety = self._assess_safety(context)
             if safety.is_crisis:
                 yield safety.response or "I'm here for you."
                 return
+            self._apply_interaction_mode(context)
             # Get empathy pattern
             pattern = self.empathy_patterns.get_pattern(context.emotion, context.empathy_style)
             
@@ -351,6 +368,8 @@ class EmpathicResponseGenerator:
             else:
                 # Fallbck to template (yield full string at once)
                 yield self._generate_template_response(context, pattern)
+            if safety.support_note:
+                yield safety.support_note
                 
         except Exception as e:
             logger.error(f"Streaming generation failed: {e}")
@@ -435,6 +454,8 @@ Recent Conversation:
 {history_text}
 
 Current User Message: "{context.user_text}"
+
+{mode_instructions(context.interaction_mode)}
 
 Instructions:
 - Acknowledge the user's emotional state with empathy
@@ -691,8 +712,21 @@ Response:"""
             empathy_style=context.empathy_style,
             confidence=0.5,
             generation_time=generation_time,
-            follow_up_suggested=True
+            follow_up_suggested=True,
+            interaction_mode=getattr(context, "interaction_mode", "listen"),
         )
+
+    def _apply_interaction_mode(self, context: ResponseContext) -> None:
+        decision = self.mode_router.route(context.user_text, context.user_preferences)
+        context.interaction_mode = decision.mode
+
+    def _assess_safety(self, context: ResponseContext):
+        prefs = context.user_preferences or {}
+        session_id = prefs.get("session_id") or prefs.get("client_id")
+        region = prefs.get("region")
+        if region:
+            self.safety_guard.region = str(region).upper()
+        return self.safety_guard.assess(context.user_text, session_id=session_id)
     
     def get_available_styles(self) -> List[str]:
         """Get available empathy styles."""
