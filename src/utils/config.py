@@ -73,6 +73,11 @@ class SpeechRecognitionConfig:
     vad_noise_percentile: float = 0.1
     initial_prompt: Optional[str] = None
     condition_on_previous_text: bool = True
+    denoise: bool = True
+    distress_prompt: str = (
+        "Empathic conversation. The speaker may be crying, whispering, or on a phone. "
+        "Transcribe the words faithfully."
+    )
 
 
 @dataclass
@@ -149,6 +154,8 @@ class TextToSpeechConfig:
     lazy_load: bool = False
     streaming: bool = True
     stream_chunk_chars: int = 140
+    first_chunk_chars: int = 64
+    target_first_audio_ms: int = 800
 
     def __post_init__(self):
         if self.voice_mapping is None:
@@ -171,6 +178,9 @@ class MemoryConfig:
     retrieval_limit: int = 3
     save_conversations: bool = True
     conversation_file: str = "data/conversations.json"
+    encrypt: bool = True
+    require_consent: bool = True
+    key_file: str = "data/.memory_key"
     max_items: int = 2000
     prune_to: int = 1500
     prune_strategy: str = "global"  # global, per_topic
@@ -178,6 +188,12 @@ class MemoryConfig:
     batch_embeddings: bool = True
     batch_size: int = 8
     batch_flush_seconds: float = 1.5
+
+
+@dataclass
+class ClinicConfig:
+    profile: str = "companion"
+    allow_web_profile_switch: bool = True
 
 
 class Config:
@@ -197,6 +213,7 @@ class Config:
         self.response_generation = self._create_response_generation_config()
         self.text_to_speech = self._create_text_to_speech_config()
         self.memory = self._create_memory_config()
+        self.clinic = self._create_clinic_config()
     
     def load_config(self):
         """Load configuration from YAML file."""
@@ -231,7 +248,9 @@ class Config:
         return AudioConfig(**audio_data)
     
     def _create_speech_recognition_config(self) -> SpeechRecognitionConfig:
-        sr_data = self._config_data.get('speech_recognition', {})
+        sr_data = dict(self._config_data.get('speech_recognition', {}))
+        allowed = SpeechRecognitionConfig.__dataclass_fields__.keys()
+        sr_data = {k: v for k, v in sr_data.items() if k in allowed}
         return SpeechRecognitionConfig(**sr_data)
     
     def _create_emotion_detection_config(self) -> EmotionDetectionConfig:
@@ -267,8 +286,16 @@ class Config:
         tts_data = {k: v for k, v in tts_data.items() if k in allowed}
         return TextToSpeechConfig(**tts_data)
     
+    def _create_clinic_config(self) -> ClinicConfig:
+        data = dict(self._config_data.get("clinic", {}))
+        allowed = ClinicConfig.__dataclass_fields__.keys()
+        data = {k: v for k, v in data.items() if k in allowed}
+        return ClinicConfig(**data)
+
     def _create_memory_config(self) -> MemoryConfig:
-        memory_data = self._config_data.get('memory', {})
+        memory_data = dict(self._config_data.get('memory', {}))
+        allowed = MemoryConfig.__dataclass_fields__.keys()
+        memory_data = {k: v for k, v in memory_data.items() if k in allowed}
         return MemoryConfig(**memory_data)
 
     def _apply_performance_profile(self):

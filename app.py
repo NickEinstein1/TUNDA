@@ -13,8 +13,10 @@ from typing import Dict, Any, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 import uvicorn
+import base64
+import io
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -29,6 +31,7 @@ from src.emotion.detector import EmotionDetector
 from src.response.generator import EmpathicResponseGenerator, ResponseContext
 from src.speech.synthesis import TextToSpeechPipeline
 from src.speech.voice import speech_settings_for
+from src.speech.stream import wav_bytes_to_float
 from src.memory.conversation import ConversationMemory
 
 # Configure logging
@@ -39,6 +42,45 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Empathic Voice Companion", version="1.0.0")
 
 # Health check endpoint for Render
+@app.post("/api/tts/stream")
+async def tts_stream(request: Request):
+    """Stream WAV chunks; first clause is synthesized first for low latency."""
+    if not tts_pipeline:
+        return JSONResponse({"error": "tts_unavailable"}, status_code=503)
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    emotion = body.get("emotion")
+    if not text:
+        return JSONResponse({"error": "empty_text"}, status_code=400)
+
+    def generate():
+        for event in tts_pipeline.iter_stream_events(text, emotion=emotion):
+            yield json.dumps(event) + "\n"
+
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
+
+
+@app.post("/api/stt")
+async def stt_from_wav(request: Request):
+    """Transcribe a 16-bit WAV body (base64) with denoise + distress prompt."""
+    if not speech_recognizer:
+        return JSONResponse({"error": "stt_unavailable"}, status_code=503)
+    body = await request.json()
+    b64 = body.get("audio_b64") or ""
+    try:
+        wav = base64.b64decode(b64)
+        audio = wav_bytes_to_float(wav, target_rate=16000)
+    except Exception as exc:
+        return JSONResponse({"error": f"bad_wav: {exc}"}, status_code=400)
+    result = speech_recognizer.transcribe(audio)
+    return {
+        "text": result.text,
+        "confidence": result.confidence,
+        "language": result.language,
+        "processing_time": result.processing_time,
+    }
+
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "Tunda Voice Companion"}
@@ -153,6 +195,57 @@ async def get_health_details():
     }
 
 
+@app.get("/api/clinic/status")
+async def get_clinic_status():
+    from src.clinic.profiles import get_clinic_profile, list_clinic_profiles
+
+    profile = get_clinic_profile(getattr(getattr(config, "clinic", None), "profile", "companion"))
+    llm_online = response_generator.is_llm_available() if response_generator else False
+    return {
+        "profile": profile.profile_id,
+        "label": profile.label,
+        "care_mode": profile.care_mode,
+        "allow_template_fallback": profile.allow_template_fallback,
+        "allow_web_profile_switch": getattr(getattr(config, "clinic", None), "allow_web_profile_switch", True),
+        "llm_online": llm_online,
+        "care_ready": (not profile.care_mode) or llm_online,
+        "profiles": list_clinic_profiles(),
+        "offline_message": None if ((not profile.care_mode) or llm_online) else "Ollama is offline. Not in care mode.",
+    }
+
+
+@app.get("/api/recap")
+async def get_recap():
+    if not conversation_memory:
+        return {"recap": ""}
+    return {"recap": conversation_memory.shareable_recap(), "includes_transcripts": False}
+
+
+@app.get("/api/clinician/trends")
+async def get_clinician_trends():
+    if not conversation_memory:
+        return {"enabled": False, "days": [], "includes_transcripts": False}
+    return conversation_memory.clinician_trend_view()
+
+
+@app.post("/api/memory/wipe")
+async def wipe_memory():
+    if not conversation_memory:
+        return {"wiped": False}
+    conversation_memory.clear_all_conversations()
+    return {"wiped": True, "includes_transcripts": False}
+
+
+@app.get("/api/memory/status")
+async def get_memory_status():
+    """Consent and encryption status for stored conversations."""
+    if not conversation_memory:
+        return {"available": False}
+    status = conversation_memory.consent_status()
+    status["available"] = True
+    return status
+
+
 @app.get("/api/crisis-regions")
 async def get_crisis_regions():
     """Local emergency and crisis numbers by region."""
@@ -215,7 +308,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         session_id = conversation_memory.start_new_session(f"web_{client_id}")
         await manager.send_message(client_id, {
             "type": "session_started",
-            "session_id": session_id
+            "session_id": session_id,
+            "memory": conversation_memory.consent_status(),
+            "resume": conversation_memory.last_persisted_preview(),
         })
     
     try:
@@ -248,6 +343,18 @@ async def handle_websocket_message(client_id: str, message: dict):
         await handle_emotion_feedback(client_id, message)
     elif message_type == "response_feedback":
         await handle_response_feedback(client_id, message)
+    elif message_type == "memory_consent":
+        await handle_memory_consent(client_id, message)
+    elif message_type == "resume_session":
+        await handle_resume_session(client_id, message)
+    elif message_type == "clinician_share":
+        await handle_clinician_share(client_id, message)
+    elif message_type == "get_recap":
+        await handle_get_recap(client_id)
+    elif message_type == "get_clinician_trends":
+        await handle_get_clinician_trends(client_id)
+    elif message_type == "memory_wipe":
+        await handle_memory_wipe(client_id)
     else:
         await manager.send_message(client_id, {
             "type": "error",
@@ -319,6 +426,11 @@ async def handle_text_input(client_id: str, message: dict):
             user_preferences["region"] = region
             if conversation_memory:
                 conversation_memory.update_user_preferences({"region": region})
+        clinic_profile = (message.get("clinic_profile") or "").strip()
+        if clinic_profile:
+            user_preferences["clinic_profile"] = clinic_profile
+            if conversation_memory:
+                conversation_memory.update_user_preferences({"clinic_profile": clinic_profile})
 
         response_context = ResponseContext(
             user_text=user_text,
@@ -338,6 +450,9 @@ async def handle_text_input(client_id: str, message: dict):
             last_turn.assistant_response = empathic_response.text
             last_turn.empathy_style = empathic_response.empathy_style
             last_turn.response_confidence = empathic_response.confidence
+            conversation_memory.record_safety_flag(empathic_response.safety_tier)
+            if empathic_response.grounding:
+                conversation_memory.record_tool("grounding")
 
         # Send response
         await manager.send_message(client_id, {
@@ -353,10 +468,16 @@ async def handle_text_input(client_id: str, message: dict):
             "fusion_text_boost": conversation_memory.get_fusion_text_boost() if conversation_memory else 0.0,
             "speech": speech_settings_for(
                 emotion_result["emotion"],
-                empathic_response.interaction_mode,
+                "grounding" if empathic_response.grounding else empathic_response.interaction_mode,
             ),
+            "grounding": empathic_response.grounding,
             "safety_tier": empathic_response.safety_tier,
             "crisis_resources": empathic_response.crisis_resources,
+            "memory": conversation_memory.consent_status() if conversation_memory else None,
+            "recap": conversation_memory.shareable_recap() if conversation_memory else "",
+            "clinic_profile": empathic_response.clinic_profile,
+            "care_mode": empathic_response.care_mode,
+            "llm_online": empathic_response.llm_online,
         })
         
     except Exception as e:
@@ -370,22 +491,28 @@ async def handle_text_input(client_id: str, message: dict):
 async def handle_audio_input(client_id: str, message: dict):
     """Handle audio input from user."""
     try:
-        # For now, we'll acknowledge the audio but process as text
-        # In a full implementation, you would:
-        # 1. Decode the audio data
-        # 2. Use the speech recognition pipeline
-        # 3. Process through emotion detection
-
         await manager.send_message(client_id, {
             "type": "processing",
             "stage": "audio_processing"
         })
 
-        # Placeholder - in real implementation, transcribe audio here
-        user_text = message.get("transcript", "I spoke something but it wasn't transcribed")
+        user_text = (message.get("transcript") or "").strip()
+        b64 = message.get("audio_b64") or message.get("audio")
+        if (not user_text) and b64 and speech_recognizer:
+            wav = base64.b64decode(b64)
+            audio = wav_bytes_to_float(wav, target_rate=16000)
+            result = speech_recognizer.transcribe(audio)
+            user_text = (result.text or "").strip()
+        if not user_text:
+            await manager.send_message(client_id, {
+                "type": "error",
+                "message": "I couldn't catch that. Try speaking a little closer, or type instead.",
+            })
+            return
 
-        # Process as text input
-        await handle_text_input(client_id, {"text": user_text})
+        extra = {k: message.get(k) for k in ("response_mode", "region") if message.get(k)}
+        extra["text"] = user_text
+        await handle_text_input(client_id, extra)
 
     except Exception as e:
         logger.error(f"Error handling audio input: {e}")
@@ -425,6 +552,80 @@ async def handle_response_feedback(client_id: str, message: dict):
     await manager.send_message(client_id, {
         "type": "response_feedback_ack",
         "fusion_text_boost": conversation_memory.get_fusion_text_boost(),
+    })
+
+
+async def handle_memory_wipe(client_id: str):
+    """Erase encrypted saved visits and start a clean session."""
+    if not conversation_memory:
+        await manager.send_message(client_id, {
+            "type": "error",
+            "message": "Conversation memory not available",
+        })
+        return
+    conversation_memory.clear_all_conversations()
+    session_id = conversation_memory.start_new_session(f"web_{client_id}")
+    await manager.send_message(client_id, {
+        "type": "memory_wiped",
+        "session_id": session_id,
+        "memory": conversation_memory.consent_status(),
+        "recap": "",
+    })
+
+
+async def handle_memory_consent(client_id: str, message: dict):
+    """Remember or discard the current session."""
+    if not conversation_memory:
+        await manager.send_message(client_id, {
+            "type": "error",
+            "message": "Conversation memory not available",
+        })
+        return
+    persist = bool(message.get("persist"))
+    status = conversation_memory.set_persist_consent(persist)
+    if persist:
+        status["recap"] = conversation_memory.shareable_recap()
+    await manager.send_message(client_id, {
+        "type": "memory_consent_ack",
+        **status,
+    })
+
+
+async def handle_resume_session(client_id: str, message: dict):
+    if not conversation_memory:
+        return
+    if message.get("fresh"):
+        conversation_memory.current_session.user_preferences.pop("resume_recap", None) if conversation_memory.current_session else None
+        await manager.send_message(client_id, {"type": "resume_ack", "resumed": False, "fresh": True})
+        return
+    result = conversation_memory.resume_last_session()
+    await manager.send_message(client_id, {"type": "resume_ack", **result})
+
+
+async def handle_clinician_share(client_id: str, message: dict):
+    if not conversation_memory:
+        return
+    status = conversation_memory.set_clinician_share(bool(message.get("enabled")))
+    await manager.send_message(client_id, {"type": "clinician_share_ack", **status})
+
+
+async def handle_get_recap(client_id: str):
+    if not conversation_memory:
+        await manager.send_message(client_id, {"type": "recap", "recap": ""})
+        return
+    await manager.send_message(client_id, {
+        "type": "recap",
+        "recap": conversation_memory.shareable_recap(),
+    })
+
+
+async def handle_get_clinician_trends(client_id: str):
+    if not conversation_memory:
+        await manager.send_message(client_id, {"type": "clinician_trends", "enabled": False, "days": []})
+        return
+    await manager.send_message(client_id, {
+        "type": "clinician_trends",
+        **conversation_memory.clinician_trend_view(),
     })
 
 

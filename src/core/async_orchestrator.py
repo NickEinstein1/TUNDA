@@ -232,10 +232,11 @@ class AsyncStreamOrchestrator:
 
             full_response = full_response.strip()
             if full_response:
-                self.memory.add_memory(
-                    text=f"User: {text}\nAssistant: {full_response}",
-                    metadata={"emotion": emotion_pred.emotion}
-                )
+                if not self.conversation_memory or self.conversation_memory.may_persist():
+                    self.memory.add_memory(
+                        text=f"User: {text}\nAssistant: {full_response}",
+                        metadata={"emotion": emotion_pred.emotion}
+                    )
                 if self.conversation_memory:
                     self.conversation_memory.add_conversation_turn(
                         user_text=text,

@@ -59,6 +59,7 @@ speech_recognition:
   vad_noise_percentile: 0.1
   initial_prompt: null
   condition_on_previous_text: true
+  denoise: true
 
 # Emotion Detection
 emotion_detection:
@@ -109,6 +110,11 @@ response_generation:
     therapeutic: "Use CBT-inspired techniques for emotional support"
   default_style: "supportive"
 
+# Clinic trust
+clinic:
+  profile: "companion"  # companion | between_sessions | high_risk_watch
+  allow_web_profile_switch: true
+
 # Personality Settings
 personality:
   name: "Tunda"
@@ -137,6 +143,8 @@ text_to_speech:
   lazy_load: false
   streaming: true
   stream_chunk_chars: 140
+  first_chunk_chars: 64
+  target_first_audio_ms: 800
   voice_mapping:
     happy: "default"
     sad: "default"
@@ -154,6 +162,9 @@ memory:
   retrieval_limit: 3
   save_conversations: true
   conversation_file: "data/conversations.json"
+  encrypt: true
+  require_consent: true
+  key_file: "data/.memory_key"
   max_items: 2000
   prune_to: 1500
   prune_strategy: "global"

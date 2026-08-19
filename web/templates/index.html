@@ -15,6 +15,36 @@
             color: #333;
         }
 
+        .honesty-strip {
+            position: sticky;
+            top: 0;
+            z-index: 30;
+            background: rgba(8, 16, 28, 0.94);
+            border-bottom: 1px solid rgba(255, 196, 120, 0.28);
+            color: #f3e6d2;
+            font-size: 0.86em;
+            line-height: 1.45;
+        }
+        .honesty-strip .honesty-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 10px 20px 12px;
+        }
+        .honesty-strip strong { color: #ffe4c4; }
+        .honesty-strip details { margin-top: 6px; }
+        .honesty-strip summary { cursor: pointer; color: #9bffe5; }
+        .honesty-strip ul { margin: 8px 0 0 18px; }
+        .honesty-strip .wipe-btn {
+            margin-top: 8px;
+            border: 1px solid rgba(255, 160, 170, 0.45);
+            background: transparent;
+            color: #ffd0d6;
+            border-radius: 999px;
+            padding: 5px 12px;
+            cursor: pointer;
+            font-size: 0.86em;
+        }
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
@@ -22,7 +52,8 @@
             display: grid;
             grid-template-columns: 1fr 300px;
             gap: 20px;
-            height: 100vh;
+            height: calc(100vh - 0px);
+            min-height: 0;
         }
 
         .main-panel {
@@ -677,6 +708,71 @@
             color: #7aa3c7;
         }
 
+        .consent-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin: 0 0 10px;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(131, 244, 208, 0.22);
+            background: rgba(8, 22, 38, 0.55);
+            font-size: 0.86em;
+            color: #c5d8ec;
+        }
+
+        .consent-bar .consent-copy { flex: 1 1 220px; }
+        .consent-btn {
+            border: 1px solid rgba(131, 244, 208, 0.3);
+            background: rgba(10, 25, 43, 0.95);
+            color: #dcf9ff;
+            border-radius: 999px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 0.86em;
+        }
+        .consent-btn.keep { border-color: rgba(134, 255, 213, 0.45); }
+        .consent-btn.forget { border-color: rgba(255, 160, 170, 0.4); color: #ffd0d6; }
+        .consent-status { color: #86ffd5; font-size: 0.82em; }
+
+        .care-banner {
+            margin: 0 0 12px;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 196, 120, 0.45);
+            background: rgba(80, 40, 10, 0.45);
+            color: #ffe4c4;
+            font-size: 0.88em;
+        }
+
+        .resume-card, .recap-card, .clinician-card {
+            margin-top: 14px;
+            padding: 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(131, 244, 208, 0.22);
+            background: rgba(8, 22, 38, 0.72);
+            color: #d5e6f5;
+            font-size: 0.88em;
+        }
+        .resume-card h3, .recap-card h3, .clinician-card h3 {
+            margin: 0 0 8px;
+            color: #9bffe5;
+            font-size: 0.95em;
+        }
+        .recap-text {
+            white-space: pre-wrap;
+            line-height: 1.45;
+            margin: 0 0 10px;
+        }
+        .trend-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(131, 244, 208, 0.12);
+        }
+
         .crisis-help-card {
             margin-top: 12px;
             padding: 14px 16px;
@@ -1132,6 +1228,24 @@
     </style>
 </head>
 <body>
+    <div class="honesty-strip" role="note">
+        <div class="honesty-inner">
+            <strong>Tunda is not a therapist and not emergency care.</strong>
+            If you might be in danger, use local emergency services or a crisis line from Help numbers.
+            This visit is not saved unless you tap Remember. Saved visits stay encrypted on this device.
+            <details>
+                <summary>What is stored, who can see it, and how to wipe</summary>
+                <ul>
+                    <li><strong>Not a therapist.</strong> Tunda is a companion. It does not diagnose, treat, or replace a clinician.</li>
+                    <li><strong>Not emergency care.</strong> Crisis replies can show local numbers. They are not a substitute for calling for help.</li>
+                    <li><strong>What is stored.</strong> Nothing, unless you choose Remember. Then this visit is encrypted on this machine (not a cloud chart).</li>
+                    <li><strong>Who sees trends.</strong> Mood, crisis flags, and engagement only if you opt in to clinician trends. No message transcripts are included.</li>
+                    <li><strong>How to wipe.</strong> Use Wipe saved memory below, or Don’t save for this visit. That deletes stored visits on this device.</li>
+                </ul>
+                <button type="button" class="wipe-btn" id="wipe-memory">Wipe saved memory</button>
+            </details>
+        </div>
+    </div>
     <div class="cyber-grid"></div>
     <div class="container">
         <div class="main-panel">
@@ -1174,8 +1288,18 @@
 
             <div id="chat-container" class="chat-container"></div>
 
+            <div id="care-banner" class="care-banner" style="display:none;"></div>
+
             <div class="status" id="status">
                 <i class="fas fa-heart"></i> Ready to listen and support you...
+            </div>
+
+            <div class="consent-bar" id="consent-bar">
+                <span class="consent-copy">This visit is not saved unless you ask. Stored sessions are encrypted on this machine.</span>
+                <button type="button" class="consent-btn keep" id="remember-session">Remember this session</button>
+                <button type="button" class="consent-btn forget" id="forget-session">Don't save</button>
+                <button type="button" class="consent-btn keep" id="guide-now">Guide me now</button>
+                <span class="consent-status" id="consent-status"></span>
             </div>
 
             <div class="prefs-bar">
@@ -1184,6 +1308,12 @@
                     <option value="">Auto</option>
                     <option value="listen">Listen &amp; reflect</option>
                     <option value="coach">Gentle tips</option>
+                </select>
+                <label for="clinic-profile">Clinic profile</label>
+                <select id="clinic-profile" title="Companion allows informal chat if the model is down. Care profiles require Ollama.">
+                    <option value="companion">Companion</option>
+                    <option value="between_sessions">Between sessions</option>
+                    <option value="high_risk_watch">High-risk watch</option>
                 </select>
                 <label for="help-region">Help numbers</label>
                 <select id="help-region" title="Local emergency and crisis numbers">
@@ -1213,6 +1343,28 @@
                 <h3><i class="fas fa-heart-pulse"></i> Personalized Care</h3>
                 <div id="care-plan-content"></div>
             </div>
+
+            <div id="resume-card" class="resume-card" style="display:none;">
+                <h3><i class="fas fa-clock-rotate-left"></i> Last visit</h3>
+                <p class="recap-text" id="resume-recap"></p>
+                <button type="button" class="consent-btn keep" id="resume-continue">Pick up from last time</button>
+                <button type="button" class="consent-btn forget" id="resume-fresh">Start fresh</button>
+            </div>
+
+            <div id="recap-card" class="recap-card">
+                <h3><i class="fas fa-file-lines"></i> Visit recap to share</h3>
+                <p class="recap-text" id="recap-text">Talk for a bit, then tap Remember if you want a recap saved.</p>
+                <button type="button" class="consent-btn keep" id="copy-recap">Copy recap</button>
+            </div>
+
+            <div id="clinician-card" class="clinician-card">
+                <h3><i class="fas fa-user-doctor"></i> Clinician trend view</h3>
+                <label style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+                    <input type="checkbox" id="clinician-share">
+                    Share mood/crisis/engagement trends (no transcripts)
+                </label>
+                <div id="clinician-trends">Off until you opt in.</div>
+            </div>
         </div>
     </div>
 
@@ -1240,6 +1392,12 @@
         let avocadoSlicePlayed = false;
         let speechGeneration = 0;
         let isSpeakingReply = false;
+        let ttsAudioCtx = null;
+        let ttsSources = [];
+        let recBuffers = [];
+        let recContext = null;
+        let recStream = null;
+        let recNode = null;
         let bargeInStream = null;
         let bargeInRaf = 0;
         let bargeInHits = 0;
@@ -1280,6 +1438,8 @@
             switch(message.type) {
                 case 'session_started':
                     updateStatus(`<i class="fas fa-play"></i> Session started with Tunda`, 'success');
+                    applyMemoryStatus(message.memory);
+                    showResumeOffer(message.resume);
                     break;
                 case 'processing':
                     const stage = message.stage.replace('_', ' ');
@@ -1307,8 +1467,46 @@
                         message.response_text,
                         message.emotion,
                         message.interaction_mode,
-                        message.speech
+                        message.speech,
+                        message.grounding
                     );
+                    applyMemoryStatus(message.memory);
+                    if (message.recap) setRecapText(message.recap);
+                    applyCareBanner(message);
+                    break;
+                case 'memory_consent_ack':
+                    applyMemoryStatus(message);
+                    if (message.recap) setRecapText(message.recap);
+                    updateStatus(
+                        message.persist_consent
+                            ? '<i class="fas fa-lock"></i> This session will be stored encrypted.'
+                            : '<i class="fas fa-user-secret"></i> This session will not be saved.',
+                        'success'
+                    );
+                    break;
+                case 'memory_wiped':
+                    applyMemoryStatus(message.memory);
+                    setRecapText('Talk for a bit, then tap Remember if you want a recap saved.');
+                    if (chatContainer) chatContainer.innerHTML = '';
+                    updateStatus('<i class="fas fa-eraser"></i> Saved memory wiped on this device.', 'success');
+                    addMessage('Saved visits on this device were deleted. This is a new, unsaved visit.', 'assistant');
+                    break;
+                case 'resume_ack':
+                    if (message.resumed && message.recap) {
+                        setRecapText(message.recap);
+                        addMessage('Picking up from last time:\n' + message.recap, 'assistant');
+                    }
+                    document.getElementById('resume-card').style.display = 'none';
+                    break;
+                case 'recap':
+                    if (message.recap) setRecapText(message.recap);
+                    break;
+                case 'clinician_share_ack':
+                    document.getElementById('clinician-share').checked = !!message.clinician_share;
+                    if (message.clinician_share) ws.send(JSON.stringify({ type: 'get_clinician_trends' }));
+                    break;
+                case 'clinician_trends':
+                    renderClinicianTrends(message);
                     break;
                 case 'emotion_patterns':
                     updateEmotionPatterns(message.patterns);
@@ -1346,10 +1544,16 @@
             }
         }
 
+        function stopTtsAudio() {
+            ttsSources.forEach((src) => { try { src.stop(); } catch (err) {} });
+            ttsSources = [];
+        }
+
         function stopSpeaking(startListening) {
             speechGeneration += 1;
             isSpeakingReply = false;
             stopBargeInMonitor();
+            stopTtsAudio();
             if ('speechSynthesis' in window) {
                 speechSynthesis.cancel();
             }
@@ -1365,6 +1569,9 @@
             }
             if (mode === 'escalate' || mode === 'crisis') {
                 return { rate: 0.78, pitch: 0.94, volume: 0.74, pause_ms: 360 };
+            }
+            if (mode === 'grounding') {
+                return { rate: 0.76, pitch: 0.96, volume: 0.76, pause_ms: 1400 };
             }
             const profiles = {
                 sad: { rate: 0.82, pitch: 0.93, volume: 0.78, pause_ms: 320 },
@@ -1455,28 +1662,111 @@
             });
         }
 
-        async function speakResponse(text, emotion, mode, serverProfile) {
+        async function playWavBase64(b64, generation) {
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+            if (!ttsAudioCtx) ttsAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (ttsAudioCtx.state === 'suspended') await ttsAudioCtx.resume();
+            const buffer = await ttsAudioCtx.decodeAudioData(bytes.buffer.slice(0));
+            if (generation !== speechGeneration) return;
+            await new Promise((resolve) => {
+                const src = ttsAudioCtx.createBufferSource();
+                src.buffer = buffer;
+                src.connect(ttsAudioCtx.destination);
+                ttsSources.push(src);
+                src.onended = resolve;
+                src.start();
+            });
+        }
+
+        async function speakViaServerStream(text, emotion, generation) {
+            const res = await fetch('/api/tts/stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, emotion })
+            });
+            if (!res.ok || !res.body) return false;
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let leftover = '';
+            let played = false;
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                if (generation !== speechGeneration) {
+                    try { await reader.cancel(); } catch (err) {}
+                    return played;
+                }
+                leftover += decoder.decode(value, { stream: true });
+                const lines = leftover.split('\n');
+                leftover = lines.pop();
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    const event = JSON.parse(line);
+                    if (event.first && event.elapsed_ms) {
+                        updateStatus(`<i class="fas fa-volume-up"></i> First audio ${Math.round(event.elapsed_ms)} ms`, 'ready');
+                    }
+                    if (event.audio_b64) {
+                        played = true;
+                        await playWavBase64(event.audio_b64, generation);
+                    }
+                }
+            }
+            return played;
+        }
+
+        async function speakResponse(text, emotion, mode, serverProfile, grounding) {
             stopSpeaking(false);
             const generation = speechGeneration;
-            const profile = speechProfile(emotion, mode, serverProfile);
-            const units = splitSpeechUnits(text);
-            if (!units.length || !('speechSynthesis' in window)) {
+            const profile = speechProfile(emotion, grounding ? 'grounding' : mode, serverProfile);
+            let units = splitSpeechUnits(text);
+            let pauses = units.map(() => profile.pause_ms || 220);
+            if (grounding && Array.isArray(grounding.steps) && grounding.steps.length) {
+                units = grounding.steps.map((step) => step.text).filter(Boolean);
+                pauses = grounding.steps.map((step) => Number(step.pause_ms) || 900);
+            }
+            if (!units.length) {
                 tundaAvatar.classList.remove('speaking');
                 return;
             }
 
             isSpeakingReply = true;
             tundaAvatar.classList.add('speaking');
-            updateStatus('<i class="fas fa-volume-up"></i> Speaking — talk or tap to interrupt', 'ready');
+            updateStatus(
+                grounding
+                    ? '<i class="fas fa-wind"></i> Guiding you — talk or tap to stop'
+                    : '<i class="fas fa-volume-up"></i> Speaking — talk or tap to interrupt',
+                'ready'
+            );
             startBargeInMonitor(generation);
-            const voice = pickCareVoice();
 
+            const spokenText = units.join(' ');
+            try {
+                const streamed = await speakViaServerStream(spokenText, emotion, generation);
+                if (streamed) {
+                    if (generation === speechGeneration) {
+                        isSpeakingReply = false;
+                        stopBargeInMonitor();
+                        tundaAvatar.classList.remove('speaking');
+                    }
+                    return;
+                }
+            } catch (err) {
+                /* browser voice fallback */
+            }
+
+            if (!('speechSynthesis' in window)) {
+                tundaAvatar.classList.remove('speaking');
+                return;
+            }
+            const voice = pickCareVoice();
             for (let i = 0; i < units.length; i += 1) {
                 if (generation !== speechGeneration) return;
                 await speakUnit(units[i], profile, voice);
                 if (generation !== speechGeneration) return;
-                if (i < units.length - 1 && profile.pause_ms) {
-                    await new Promise((resolve) => setTimeout(resolve, profile.pause_ms));
+                if (i < units.length - 1) {
+                    await new Promise((resolve) => setTimeout(resolve, pauses[i] || 400));
                 }
             }
 
@@ -1692,59 +1982,127 @@
             if (regionEl && regionEl.value) {
                 payload.region = regionEl.value;
             }
+            const clinicEl = document.getElementById('clinic-profile');
+            if (clinicEl && clinicEl.value) {
+                payload.clinic_profile = clinicEl.value;
+            }
             ws.send(JSON.stringify(payload));
 
             textInput.value = '';
         }
 
-        function startVoiceRecording() {
-            if (!recognition) {
-                updateStatus('<i class="fas fa-exclamation-triangle"></i> Speech recognition not supported in this browser', 'error');
-                return;
+        function encodeWav(samples, sampleRate) {
+            const buffer = new ArrayBuffer(44 + samples.length * 2);
+            const view = new DataView(buffer);
+            const writeStr = (offset, str) => {
+                for (let i = 0; i < str.length; i += 1) view.setUint8(offset + i, str.charCodeAt(i));
+            };
+            writeStr(0, 'RIFF');
+            view.setUint32(4, 36 + samples.length * 2, true);
+            writeStr(8, 'WAVE');
+            writeStr(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, 1, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            writeStr(36, 'data');
+            view.setUint32(40, samples.length * 2, true);
+            let offset = 44;
+            for (let i = 0; i < samples.length; i += 1, offset += 2) {
+                const s = Math.max(-1, Math.min(1, samples[i]));
+                view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
             }
-
-            if (isRecording) {
-                stopVoiceRecording();
-                return;
-            }
-
-            stopSpeaking(false);
-            isRecording = true;
-            voiceButton.classList.add('recording');
-            voiceButton.innerHTML = '<i class="fas fa-stop"></i>';
-            updateStatus('<i class="fas fa-microphone"></i> Listening... Speak now!', 'recording');
-            tundaAvatar.classList.add('listening');
-
-            recognition.onresult = function(event) {
-                const transcript = event.results[0][0].transcript;
-                textInput.value = transcript;
-                sendMessage();
-            };
-
-            recognition.onerror = function(event) {
-                updateStatus('<i class="fas fa-exclamation-circle"></i> Speech recognition error', 'error');
-                stopVoiceRecording();
-            };
-
-            recognition.onend = function() {
-                stopVoiceRecording();
-            };
-
-            recognition.start();
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+            return btoa(binary);
         }
 
-        function stopVoiceRecording() {
-            if (!isRecording) return;
+        async function startVoiceRecording() {
+            if (isRecording) {
+                await stopVoiceRecording();
+                return;
+            }
+            stopSpeaking(false);
+            isRecording = true;
+            recBuffers = [];
+            voiceButton.classList.add('recording');
+            voiceButton.innerHTML = '<i class="fas fa-stop"></i>';
+            updateStatus('<i class="fas fa-microphone"></i> Listening... Speak now, then tap to send.', 'recording');
+            tundaAvatar.classList.add('listening');
 
+            try {
+                recStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 }
+                });
+                recContext = new AudioContext({ sampleRate: 16000 });
+                const source = recContext.createMediaStreamSource(recStream);
+                recNode = recContext.createScriptProcessor(4096, 1, 1);
+                recNode.onaudioprocess = (event) => {
+                    recBuffers.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+                };
+                const mute = recContext.createGain();
+                mute.gain.value = 0;
+                source.connect(recNode);
+                recNode.connect(mute);
+                mute.connect(recContext.destination);
+            } catch (err) {
+                if (recognition) {
+                    recognition.onresult = function(event) {
+                        textInput.value = event.results[0][0].transcript;
+                        sendMessage();
+                    };
+                    recognition.onerror = function() {
+                        updateStatus('<i class="fas fa-exclamation-circle"></i> Speech recognition error', 'error');
+                        stopVoiceRecording();
+                    };
+                    recognition.onend = function() { stopVoiceRecording(); };
+                    recognition.start();
+                    return;
+                }
+                updateStatus('<i class="fas fa-exclamation-triangle"></i> Microphone not available', 'error');
+                isRecording = false;
+                voiceButton.classList.remove('recording');
+            }
+        }
+
+        async function stopVoiceRecording() {
+            if (!isRecording) return;
             isRecording = false;
             voiceButton.classList.remove('recording');
             voiceButton.innerHTML = '<i class="fas fa-microphone"></i>';
-            updateStatus('<i class="fas fa-heart"></i> Ready to listen and support you...', 'ready');
             tundaAvatar.classList.remove('listening');
-
             if (recognition) {
-                recognition.stop();
+                try { recognition.stop(); } catch (err) {}
             }
+            if (recNode) { try { recNode.disconnect(); } catch (err) {} recNode = null; }
+            if (recStream) { recStream.getTracks().forEach((t) => t.stop()); recStream = null; }
+            const sampleRate = recContext ? recContext.sampleRate : 16000;
+            if (recContext) { try { await recContext.close(); } catch (err) {} recContext = null; }
+
+            if (!recBuffers.length) {
+                updateStatus('<i class="fas fa-heart"></i> Ready to listen and support you...', 'ready');
+                return;
+            }
+            let length = 0;
+            recBuffers.forEach((b) => { length += b.length; });
+            const samples = new Float32Array(length);
+            let off = 0;
+            recBuffers.forEach((b) => { samples.set(b, off); off += b.length; });
+            recBuffers = [];
+            const wavB64 = encodeWav(samples, sampleRate);
+            updateStatus('<i class="fas fa-brain"></i> Transcribing with noise-robust STT...', 'processing');
+            const payload = { type: 'audio_input', audio_b64: wavB64 };
+            const rmEl = document.getElementById('response-mode');
+            if (rmEl && rmEl.value) payload.response_mode = rmEl.value;
+            const regionEl = document.getElementById('help-region');
+            if (regionEl && regionEl.value) payload.region = regionEl.value;
+            const clinicEl = document.getElementById('clinic-profile');
+            if (clinicEl && clinicEl.value) payload.clinic_profile = clinicEl.value;
+            ws.send(JSON.stringify(payload));
         }
 
         function requestEmotionPatterns() {
@@ -1898,11 +2256,125 @@
             }
         }
 
+        function applyCareBanner(info) {
+            const banner = document.getElementById('care-banner');
+            if (!banner || !info) return;
+            if (info.care_mode && info.llm_online === false) {
+                banner.style.display = 'block';
+                banner.textContent = 'Not in care mode: Ollama is offline. Crisis routing and grounding still work. Switch to Companion for informal chat, or start Ollama.';
+            } else {
+                banner.style.display = 'none';
+            }
+        }
+
+        async function loadClinicStatus() {
+            try {
+                const res = await fetch('/api/clinic/status');
+                const data = await res.json();
+                const sel = document.getElementById('clinic-profile');
+                if (sel && data.profile) sel.value = data.profile;
+                if (sel && data.allow_web_profile_switch === false) sel.disabled = true;
+                applyCareBanner(data);
+            } catch (err) {}
+        }
+
+        function applyMemoryStatus(status) {
+            const el = document.getElementById('consent-status');
+            if (!el || !status) return;
+            if (status.persist_consent === true) {
+                el.textContent = status.encrypted ? 'Encrypted save: on' : 'Save: on';
+            } else if (status.persist_consent === false) {
+                el.textContent = 'Not saving this session';
+            } else {
+                el.textContent = 'Not saved unless you choose';
+            }
+        }
+
+        function sendMemoryConsent(persist) {
+            if (ws.readyState !== WebSocket.OPEN) return;
+            ws.send(JSON.stringify({ type: 'memory_consent', persist: persist }));
+        }
+
+        function setRecapText(text) {
+            const el = document.getElementById('recap-text');
+            if (el && text) el.textContent = text;
+        }
+
+        function showResumeOffer(resume) {
+            const card = document.getElementById('resume-card');
+            const body = document.getElementById('resume-recap');
+            if (!card || !resume || !resume.recap) {
+                if (card) card.style.display = 'none';
+                return;
+            }
+            body.textContent = resume.recap;
+            setRecapText(resume.recap);
+            card.style.display = 'block';
+        }
+
+        function renderClinicianTrends(payload) {
+            const el = document.getElementById('clinician-trends');
+            if (!el) return;
+            if (!payload || !payload.enabled) {
+                el.textContent = 'Off until you opt in. No transcripts are included.';
+                return;
+            }
+            const days = payload.days || [];
+            if (!days.length) {
+                el.textContent = 'No saved visits yet. Remember a session first.';
+                return;
+            }
+            el.innerHTML = days.map((day) => {
+                const flags = Object.keys(day.crisis_flags || {}).join(', ') || 'none';
+                return `<div class="trend-row"><span>${escapeHtml(day.date)}</span><span>${day.top_mood} · ${day.turns} turns · flags: ${escapeHtml(flags)}</span></div>`;
+            }).join('');
+        }
+
         loadHelpRegions();
+        loadClinicStatus();
+        const clinicSel = document.getElementById('clinic-profile');
+        if (clinicSel) clinicSel.addEventListener('change', loadClinicStatus);
 
         // Event listeners
         sendButton.addEventListener('click', sendMessage);
         voiceButton.addEventListener('click', startVoiceRecording);
+        const rememberBtn = document.getElementById('remember-session');
+        const forgetBtn = document.getElementById('forget-session');
+        if (rememberBtn) rememberBtn.addEventListener('click', () => sendMemoryConsent(true));
+        if (forgetBtn) forgetBtn.addEventListener('click', () => sendMemoryConsent(false));
+        const wipeBtn = document.getElementById('wipe-memory');
+        if (wipeBtn) {
+            wipeBtn.addEventListener('click', () => {
+                if (!confirm('Delete all remembered visits on this device? This cannot be undone.')) return;
+                ws.send(JSON.stringify({ type: 'memory_wipe' }));
+            });
+        }
+        const resumeContinue = document.getElementById('resume-continue');
+        const resumeFresh = document.getElementById('resume-fresh');
+        if (resumeContinue) resumeContinue.addEventListener('click', () => ws.send(JSON.stringify({ type: 'resume_session' })));
+        if (resumeFresh) resumeFresh.addEventListener('click', () => ws.send(JSON.stringify({ type: 'resume_session', fresh: true })));
+        const copyRecap = document.getElementById('copy-recap');
+        if (copyRecap) {
+            copyRecap.addEventListener('click', async () => {
+                const text = document.getElementById('recap-text')?.textContent || '';
+                try { await navigator.clipboard.writeText(text); updateStatus('<i class="fas fa-copy"></i> Recap copied.', 'success'); } catch (err) {}
+            });
+        }
+        const clinicianShare = document.getElementById('clinician-share');
+        if (clinicianShare) {
+            clinicianShare.addEventListener('change', () => {
+                ws.send(JSON.stringify({ type: 'clinician_share', enabled: clinicianShare.checked }));
+            });
+        }
+        const guideNowBtn = document.getElementById('guide-now');
+        if (guideNowBtn) {
+            guideNowBtn.addEventListener('click', () => {
+                textInput.value = 'Please guide me through a grounding exercise';
+                const modeEl = document.getElementById('response-mode');
+                if (modeEl) modeEl.value = 'coach';
+                sendMessage();
+            });
+        }
 
         textInput.addEventListener('keydown', function(e) {
             if (isSpeakingReply && e.key !== 'Shift' && e.key !== 'Meta' && e.key !== 'Control' && e.key !== 'Alt') {

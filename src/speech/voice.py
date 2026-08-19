@@ -37,6 +37,7 @@ _PROFILES: Dict[str, SpeechProfile] = {
 }
 
 _ESCALATE = SpeechProfile(rate=0.78, pitch=0.94, volume=0.74, pause_ms=360)
+_GROUNDING = SpeechProfile(rate=0.76, pitch=0.96, volume=0.76, pause_ms=1400)
 
 _ALIASES = {
     "fear": "anxious",
@@ -71,6 +72,8 @@ def get_speech_profile(
     mode = (interaction_mode or "").strip().lower()
     if mode in {"escalate", "crisis"}:
         return _ESCALATE
+    if mode == "grounding":
+        return _GROUNDING
     return _PROFILES[normalize_emotion(emotion)]
 
 

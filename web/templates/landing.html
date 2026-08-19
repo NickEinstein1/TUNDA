@@ -253,6 +253,22 @@
 
         .stat span { color: #9fb6cf; font-size: 0.84rem; }
 
+        .honesty-strip {
+            position: relative;
+            z-index: 4;
+            margin-top: 28px;
+            max-width: 720px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 196, 120, 0.28);
+            background: rgba(8, 16, 28, 0.72);
+            color: #f3e6d2;
+            font-size: 0.88rem;
+            line-height: 1.5;
+        }
+        .honesty-strip strong { color: #ffe4c4; }
+        .honesty-strip a { color: #9bffe5; }
+
         @media (max-width: 720px) {
             .stats { grid-template-columns: 1fr; }
             .topbar .brand span { display: none; }
@@ -316,6 +332,14 @@
                         <strong>Local-first</strong>
                         <span>Speech &amp; memory run on your system</span>
                     </div>
+                </div>
+
+                <div class="honesty-strip" role="note">
+                    <strong>Tunda is not a therapist and not emergency care.</strong>
+                    If you might be in danger, use local emergency services.
+                    Visits are not saved unless you choose Remember in the app. Saved memory is encrypted on this device.
+                    Clinician trends (mood, flags, engagement — no transcripts) stay off until you opt in.
+                    You can wipe saved memory anytime in the app.
                 </div>
             </div>
         </div>
