@@ -1,6 +1,6 @@
 # Empathic Voice Companion
 
-An AI-powered voice assistant that detects emotional states from speech and responds with appropriate empathy using open-source tools.
+An AI-powered voice assistant that detects emotional states from speech and responds with appropriate empathy, to enact a sense of responce that saves lives.
 
 ## Features
 
