@@ -8,7 +8,7 @@ It is **not** a therapist, not emergency care, and **not** a validated empathic 
 
 | Fair to say | Do not claim |
 |-------------|--------------|
-| Early affect-aware companion prototype | “Empathic AI” as proven understanding |
+| Affect-aware local companion system | “Empathic AI” as proven understanding |
 | Emotion *labels* condition style, prompt, and TTS | Accurate clinical affect sensing |
 | Local LLM (Ollama) when online; templates or offline care refusal when not | Always on-device deep empathy |
 | Keyword crisis tiers + scripted grounding | Suicide-risk assessment or crisis intervention |

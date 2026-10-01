@@ -38,7 +38,7 @@ If something the companion says feels wrong, confusing, or upsetting, **trust yo
 
 ### Scope and positioning
 
-TUNDA is an **affect-aware voice companion prototype** built on automatic speech recognition, affect *labels* from voice and/or text (path-dependent), optional retrieval-augmented memory (stronger on desktop), and large language model responses when Ollama is online — with **rule-based crisis pattern routing** and scripted grounding as first-line safeguards. Empathy is prompt- and template-guided supportive language, not validated clinical empathy.
+TUNDA is an **affect-aware voice companion system** built on automatic speech recognition, affect *labels* from voice and/or text (path-dependent), optional retrieval-augmented memory (stronger on desktop), and large language model responses when Ollama is online — with **rule-based crisis pattern routing** and scripted grounding as first-line safeguards. Empathy is prompt- and template-guided supportive language, not validated clinical empathy.
 
 It should be positioned to patients as:
 
